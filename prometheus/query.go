@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -21,13 +22,30 @@ import (
 
 	"math/rand"
 
+	ttf "github.com/golang/freetype/truetype"
 	"github.com/gonum/plot"
 	"github.com/gonum/plot/plotter"
 	"github.com/gonum/plot/plotutil"
 	"github.com/gonum/plot/vg"
-	_ "github.com/gonum/plot/vg/fonts"
+	"github.com/gonum/plot/vg/fonts"
 )
 
+func init() {
+	for _, fontasset := range fonts.AssetNames() {
+		if strings.HasPrefix(fontasset, "res/fonts/") {
+			fontname := strings.TrimSuffix(path.Base(fontasset), path.Ext(fontasset))
+			fontbytes, err := fonts.Asset(fontasset)
+			if err != nil {
+				panic(err)
+			}
+			f, err := ttf.Parse(fontbytes)
+			if err != nil {
+				panic(err)
+			}
+			vg.AddFont(fontname, f)
+		}
+	}
+}
 func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
 	defText, defGraph := false, false
 	if !hugot.IsTextOnly(w) {
