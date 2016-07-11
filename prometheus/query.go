@@ -3,17 +3,29 @@ package prometheus
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"log"
 	"math"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"context"
+
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
-	"golang.org/x/net/context"
 
 	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
+
+	"math/rand"
+
+	"github.com/gonum/plot"
+	"github.com/gonum/plot/plotter"
+	"github.com/gonum/plot/plotutil"
+	"github.com/gonum/plot/vg"
+	_ "github.com/gonum/plot/vg/fonts"
 )
 
 func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
@@ -27,8 +39,9 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 	}
 
 	_ = m.Bool("t", defText, "Render the graphs as text sparkline.")
-	_ = m.Bool("g", defGraph, "Render the graphs as a png.")
+	webGraph := m.Bool("g", defGraph, "Render the graphs as a png.")
 	dur := m.Duration("d", 15*time.Minute, "how far back to render")
+
 	if err := m.Parse(); err != nil {
 		return err
 	}
@@ -36,9 +49,21 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 	if len(m.Args()) == 0 {
 		return fmt.Errorf("you need to give a query")
 	}
+	q := strings.Join(m.Args(), " ")
+
+	if *webGraph {
+		nu := *p.URL()
+		nu.Path = nu.Path + "graph"
+		qs := nu.Query()
+		qs.Set("q", q)
+		nu.RawQuery = qs.Encode()
+
+		fmt.Fprint(w, nu.String())
+		return nil
+	}
 
 	qapi := prom.NewQueryAPI(*p.client)
-	d, err := qapi.QueryRange(ctx, strings.Join(m.Args(), " "), prom.Range{time.Now().Add(-1 * *dur), time.Now(), 15 * time.Second})
+	d, err := qapi.QueryRange(ctx, q, prom.Range{time.Now().Add(-1 * *dur), time.Now(), 15 * time.Second})
 	if err != nil {
 		return err
 	}
@@ -101,7 +126,64 @@ func line(ss []model.SamplePair) string {
 	out := bytes.Buffer{}
 	for _, n := range norm {
 		i := n * float64(len(sls)-1)
+		if i < 0 {
+			i = 0
+		}
+		if i >= float64(len(sls)) {
+			i = float64(len(sls)) - 1
+		}
 		out.WriteRune(sls[int(i)])
 	}
 	return out.String()
+}
+
+func (*promH) graphHook(w http.ResponseWriter, r *http.Request) {
+	//rw, ok := hugot.ResponseWriterFromContext(r.Context())
+	//if !ok {
+	//		http.NotFound(w, r)
+	//	}
+
+	rand.Seed(int64(0))
+
+	p, err := plot.New()
+	if err != nil {
+		panic(err)
+	}
+
+	p.Title.Text = "Plotutil example"
+	p.X.Label.Text = "X"
+	p.Y.Label.Text = "Y"
+
+	err = plotutil.AddLinePoints(p,
+		"First", randomPoints(15),
+		"Second", randomPoints(15),
+		"Third", randomPoints(15))
+	if err != nil {
+		panic(err)
+	}
+
+	// Save the plot to a PNG file.
+	var wt io.WriterTo
+	if wt, err = p.WriterTo(4*vg.Inch, 2*vg.Inch, "png"); err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	if _, err := wt.WriteTo(w); err != nil {
+		log.Println("unable to write image.")
+	}
+}
+
+// randomPoints returns some random x, y points.
+func randomPoints(n int) plotter.XYs {
+	pts := make(plotter.XYs, n)
+	for i := range pts {
+		if i == 0 {
+			pts[i].X = rand.Float64()
+		} else {
+			pts[i].X = pts[i-1].X + rand.Float64()
+		}
+		pts[i].Y = pts[i].X + 10*rand.Float64()
+	}
+	return pts
 }

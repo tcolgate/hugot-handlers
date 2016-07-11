@@ -1,46 +1,48 @@
 package prometheus
 
 import (
-	"flag"
+	"net/http"
 
-	"github.com/golang/glog"
 	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/tcolgate/hugot"
 )
 
 func init() {
-	h, bh := New(
-		flag.String("prom.url", "http://localhost:9090", "prometheus URL"),
-		flag.String("prom.am.url", "http://localhost:9093", "prometheus alert manager URL"),
-		flag.String("prom.alertChan", "alerts", "channel to post new alerts to"),
-		nil,
-	)
-
-	hugot.AddCommandHandler(h)
-	hugot.AddWebHookHandler(bh)
 }
 
 type promH struct {
 	client    *prom.Client
-	amURL     *string
-	alertChan *string
+	amURL     string
+	alertChan string
+
+	hugot.CommandHandler
+	hugot.WebHookHandler
+
+	hmux *http.ServeMux
 }
 
 // New prometheus handler, returns a command and a webhook handler
-func New(purl, amurl, achan *string, ptx prom.CancelableTransport) (hugot.CommandHandler, hugot.WebHookHandler) {
-	c, err := prom.New(prom.Config{*purl, ptx})
-	if err != nil {
-		glog.Errorf("could not create prom client, %s", err.Error())
-		return nil, nil
-	}
-
-	ph := &promH{&c, amurl, achan}
+func New(c *prom.Client, amurl, achan string) *promH {
+	h := &promH{c, amurl, achan, nil, nil, http.NewServeMux()}
 
 	cs := hugot.NewCommandSet()
-	cs.AddCommandHandler(hugot.NewCommandHandler("graph", "graph a query", ph.graphCmd, nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("explain", "explains the meaning of an alert rule name", ph.explainCmd, nil))
+	cs.AddCommandHandler(hugot.NewCommandHandler("alerts", "alertsCmd", hugot.CommandFunc(h.alertCmd), nil))
+	cs.AddCommandHandler(hugot.NewCommandHandler("graph", "graph a query", hugot.CommandFunc(h.graphCmd), nil))
+	cs.AddCommandHandler(hugot.NewCommandHandler("explain", "explains the meaning of an alert rule name", h.explainCmd, nil))
 
-	ch := hugot.NewCommandHandler("prometheus", "manage the prometheus monitoring system", nil, cs)
-	bh := hugot.NewWebHookHandler("prometheus", "reports alerts from alertmanager", ph.watchAlerts)
-	return ch, bh
+	h.CommandHandler = hugot.NewCommandHandler("prometheus", "manage the prometheus monitoring tool", nil, cs)
+
+	h.hmux.HandleFunc("/", http.NotFound)
+	h.hmux.HandleFunc("/alerts", h.alertsHook)
+	h.hmux.HandleFunc("/alerts/", h.alertsHook)
+	h.hmux.HandleFunc("/graph", h.graphHook)
+	h.hmux.HandleFunc("/graph/", h.graphHook)
+
+	h.WebHookHandler = hugot.NewWebHookHandler("prometheus", "", h.webHook)
+
+	return h
+}
+
+func (p *promH) Describe() (string, string) {
+	return p.CommandHandler.Describe()
 }

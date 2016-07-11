@@ -19,51 +19,73 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"log"
 	"net/http"
+	"net/url"
+	"time"
 
-	"golang.org/x/net/context"
+	"context"
+
+	"github.com/golang/glog"
+	bot "github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot-handlers/prometheus"
+	"github.com/tcolgate/hugot/adapters/shell"
+
+	"github.com/tcolgate/hugot"
+
+	prom "github.com/prometheus/client_golang/api/prometheus"
 
 	// Add some handlers
-	"github.com/golang/glog"
-	prom "github.com/prometheus/client_golang/prometheus"
-	"github.com/tcolgate/hugot"
-	_ "github.com/tcolgate/hugot-handlers/prometheus"
-	"github.com/tcolgate/hugot/adapters/irc"
-	_ "github.com/tcolgate/hugot/handlers/ping"
-	irce "github.com/thoj/go-ircevent"
+	"github.com/tcolgate/hugot/handlers/ping"
+	"github.com/tcolgate/hugot/handlers/tableflip"
+	"github.com/tcolgate/hugot/handlers/testcli"
+	"github.com/tcolgate/hugot/handlers/testweb"
 )
 
-var (
-	nick    = flag.String("nick", "hugottest", "Bot nick")
-	user    = flag.String("irc.user", "xxxx", "IRC username")
-	pass    = flag.String("irc.pass", "xxxx", "IRC password")
-	server  = flag.String("irc.server", "chat.freenode.net:6697", "Server to connect to")
-	ircchan = flag.String("irc.channel", "#hugottest", "Channel to listen in")
-	useSSL  = flag.Bool("irc.usessl", true, "Use SSL to connect")
-)
+var nick = flag.String("nick", "minion", "Bot nick")
+
+func bgHandler(ctx context.Context, w hugot.ResponseWriter) {
+	fmt.Fprint(w, "Starting backgroud")
+	<-ctx.Done()
+	fmt.Fprint(w, "Stopping backgroud")
+}
+
+func httpHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("%#v", *r)
+	w.Write([]byte("hello world"))
+}
 
 func main() {
 	flag.Parse()
 
-	c := irce.IRC(*nick, *user)
-	c.UseTLS = *useSSL
-	c.Password = *pass
-
-	err := c.Connect(*server)
+	ctx, cancel := context.WithCancel(context.Background())
+	a, err := shell.New(*nick)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	c.Join(*ircchan)
-	defer c.Quit()
 
-	ctx := context.Background()
-	a, err := irc.New(c)
+	hugot.Handle(ping.New())
+	hugot.Handle(testcli.New())
+	hugot.Handle(tableflip.New())
+	hugot.Handle(testweb.New())
 
-	http.Handle("/metrics", prom.Handler())
+	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
+	hugot.Handle(prometheus.New(&c, "http://localhost:9093", "alerts"))
+	hugot.HandleBackground(hugot.NewBackgroundHandler("test bg", "testing bg", bgHandler))
 
-	go http.ListenAndServe(":8080", nil)
-	go hugot.ListenAndServe(ctx, a, nil)
+	u, _ := url.Parse("http://localhost:8081")
+	hugot.SetURL(u)
 
-	c.Loop()
+	go bot.ListenAndServe(ctx, a, nil)
+	go http.ListenAndServe(":8081", nil)
 
+	a.Main()
+
+	cancel()
+
+	<-ctx.Done()
+
+	//delay to check we get the output
+	<-time.After(time.Second * 1)
 }

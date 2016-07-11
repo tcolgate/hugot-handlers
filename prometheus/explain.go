@@ -1,8 +1,9 @@
 package prometheus
 
 import (
+	"context"
+
 	"github.com/tcolgate/hugot"
-	"golang.org/x/net/context"
 )
 
 func (p *promH) explainCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
