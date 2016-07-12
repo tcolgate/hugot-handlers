@@ -7,13 +7,13 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"path"
 	"sort"
 	"strings"
 	"time"
 
 	"context"
 
+	"github.com/golang/freetype"
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
 
@@ -22,7 +22,6 @@ import (
 
 	"math/rand"
 
-	ttf "github.com/golang/freetype/truetype"
 	"github.com/gonum/plot"
 	"github.com/gonum/plot/plotter"
 	"github.com/gonum/plot/plotutil"
@@ -31,21 +30,22 @@ import (
 )
 
 func init() {
-	for _, fontasset := range fonts.AssetNames() {
-		if strings.HasPrefix(fontasset, "res/fonts/") {
-			fontname := strings.TrimSuffix(path.Base(fontasset), path.Ext(fontasset))
-			fontbytes, err := fonts.Asset(fontasset)
-			if err != nil {
-				panic(err)
-			}
-			f, err := ttf.Parse(fontbytes)
-			if err != nil {
-				panic(err)
-			}
-			vg.AddFont(fontname, f)
-		}
+	fontbytes, err := fonts.Asset("LiberationSans-Regular.ttf")
+	if err != nil {
+		panic(err)
 	}
+	f, err := freetype.ParseFont(fontbytes)
+	if err != nil {
+		panic(err)
+	}
+	vg.AddFont("Helvetica", f)
+	vg.AddFont("LiberationSans-Regular", f)
+	vg.AddFont("LiberationSans-Regular.ttf", f)
+
+	plot.DefaultFont = "Helvetica"
+	plotter.DefaultFont = "Helvetica"
 }
+
 func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
 	defText, defGraph := false, false
 	if !hugot.IsTextOnly(w) {
