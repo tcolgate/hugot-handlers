@@ -29,7 +29,7 @@ import (
 	"github.com/gonum/plot/vg/fonts"
 )
 
-func init() {
+func Init() {
 	fontbytes, err := fonts.Asset("LiberationSans-Regular.ttf")
 	if err != nil {
 		panic(err)
@@ -71,12 +71,23 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 
 	if *webGraph {
 		nu := *p.URL()
-		nu.Path = nu.Path + "graph"
+		nu.Path = nu.Path + "graph/thing.png"
 		qs := nu.Query()
 		qs.Set("q", q)
 		nu.RawQuery = qs.Encode()
 
 		fmt.Fprint(w, nu.String())
+		m := hugot.Message{
+			Channel: m.Channel,
+			Attachments: []hugot.Attachment{
+				{
+					Fallback: "fallback",
+					Pretext:  "image",
+					ImageURL: "http://www.fnordware.com/superpng/pnggrad8rgb.jpg",
+				},
+			},
+		}
+		w.Send(ctx, &m)
 		return nil
 	}
 

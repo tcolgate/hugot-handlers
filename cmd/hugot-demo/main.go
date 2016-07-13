@@ -23,14 +23,14 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"time"
+	"os"
 
 	"context"
 
 	"github.com/golang/glog"
 	bot "github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot-handlers/prometheus"
-	"github.com/tcolgate/hugot/adapters/shell"
+	hslack "github.com/tcolgate/hugot/adapters/slack"
 
 	"github.com/tcolgate/hugot"
 
@@ -43,8 +43,6 @@ import (
 	"github.com/tcolgate/hugot/handlers/testweb"
 )
 
-var nick = flag.String("nick", "minion", "Bot nick")
-
 func bgHandler(ctx context.Context, w hugot.ResponseWriter) {
 	fmt.Fprint(w, "Starting backgroud")
 	<-ctx.Done()
@@ -56,11 +54,19 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("hello world"))
 }
 
+var slackToken = flag.String("token", os.Getenv("SLACK_TOKEN"), "Slack API Token")
+var nick = flag.String("nick", "minion", "Bot nick")
+
 func main() {
 	flag.Parse()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	a, err := shell.New(*nick)
+	ctx := context.Background()
+	//a, err := shell.New(*nick)
+	//if err != nil {
+	//		glog.Fatal(err)
+	//	}
+
+	a, err := hslack.New(*slackToken, *nick)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -77,15 +83,7 @@ func main() {
 	u, _ := url.Parse("http://localhost:8081")
 	hugot.SetURL(u)
 
-	go bot.ListenAndServe(ctx, a, nil)
 	go http.ListenAndServe(":8081", nil)
 
-	a.Main()
-
-	cancel()
-
-	<-ctx.Done()
-
-	//delay to check we get the output
-	<-time.After(time.Second * 1)
+	bot.ListenAndServe(ctx, a, nil)
 }
