@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,8 +19,6 @@ import (
 
 	"github.com/prometheus/common/model"
 	prom "github.com/tcolgate/client_golang/api/prometheus"
-
-	"math/rand"
 
 	"github.com/gonum/plot"
 	"github.com/gonum/plot/plotter"
@@ -68,22 +66,25 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 		return fmt.Errorf("you need to give a query")
 	}
 	q := strings.Join(m.Args(), " ")
+	s := time.Now().Add(-1 * *dur)
+	e := time.Now()
 
 	if *webGraph {
 		nu := *p.URL()
 		nu.Path = nu.Path + "graph/thing.png"
 		qs := nu.Query()
 		qs.Set("q", q)
+		qs.Set("s", fmt.Sprintf("%d", s.UnixNano()))
+		qs.Set("e", fmt.Sprintf("%d", e.UnixNano()))
 		nu.RawQuery = qs.Encode()
 
-		fmt.Fprint(w, nu.String())
 		m := hugot.Message{
 			Channel: m.Channel,
 			Attachments: []hugot.Attachment{
 				{
 					Fallback: "fallback",
 					Pretext:  "image",
-					ImageURL: "http://www.fnordware.com/superpng/pnggrad8rgb.jpg",
+					ImageURL: nu.String(),
 				},
 			},
 		}
@@ -92,7 +93,7 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 	}
 
 	qapi := prom.NewQueryAPI(*p.client)
-	d, err := qapi.QueryRange(ctx, q, prom.Range{time.Now().Add(-1 * *dur), time.Now(), 15 * time.Second})
+	d, err := qapi.QueryRange(ctx, q, prom.Range{s, e, 15 * time.Second})
 	if err != nil {
 		return err
 	}
@@ -166,53 +167,88 @@ func line(ss []model.SamplePair) string {
 	return out.String()
 }
 
-func (*promH) graphHook(w http.ResponseWriter, r *http.Request) {
-	//rw, ok := hugot.ResponseWriterFromContext(r.Context())
-	//if !ok {
-	//		http.NotFound(w, r)
-	//	}
-
-	rand.Seed(int64(0))
-
-	p, err := plot.New()
-	if err != nil {
-		panic(err)
+func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
+	q, ok := r.URL.Query()["q"]
+	if !ok || len(q) != 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	s, ok := r.URL.Query()["s"]
+	if !ok || len(s) != 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	e, ok := r.URL.Query()["e"]
+	if !ok || len(e) != 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
-	p.Title.Text = "Plotutil example"
-	p.X.Label.Text = "X"
-	p.Y.Label.Text = "Y"
+	st, _ := strconv.Atoi(s[0])
+	et, _ := strconv.Atoi(e[0])
 
-	err = plotutil.AddLinePoints(p,
-		"First", randomPoints(15),
-		"Second", randomPoints(15),
-		"Third", randomPoints(15))
+	ctx := r.Context()
+
+	qapi := prom.NewQueryAPI(*p.client)
+	d, err := qapi.QueryRange(ctx, q[0], prom.Range{time.Unix(0, int64(st)), time.Unix(0, int64(et)), 15 * time.Second})
 	if err != nil {
-		panic(err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var mx model.Matrix
+	switch d.Type() {
+	case model.ValMatrix:
+		mx = d.(model.Matrix)
+		sort.Sort(mx)
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	plt, err := plot.New()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	plt.Title.Text = "Plotutil example"
+	plt.X.Label.Text = "Time"
+	plt.X.Tick.Marker = plot.UnixTimeTicks{}
+	plt.Y.Label.Text = "Y"
+
+	for _, ss := range mx {
+		for _, sps := range mx {
+			err = plotutil.AddLinePoints(plt, ss.Metric.String(), modelToPlot(sps.Values))
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 
 	// Save the plot to a PNG file.
 	var wt io.WriterTo
-	if wt, err = p.WriterTo(4*vg.Inch, 2*vg.Inch, "png"); err != nil {
-		panic(err)
+	if wt, err = plt.WriterTo(4*vg.Inch, 2*vg.Inch, "png"); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "image/png")
 	if _, err := wt.WriteTo(w); err != nil {
-		log.Println("unable to write image.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
-// randomPoints returns some random x, y points.
-func randomPoints(n int) plotter.XYs {
-	pts := make(plotter.XYs, n)
+func modelToPlot(sps []model.SamplePair) plotter.XYs {
+	pts := make(plotter.XYs, len(sps))
 	for i := range pts {
-		if i == 0 {
-			pts[i].X = rand.Float64()
-		} else {
-			pts[i].X = pts[i-1].X + rand.Float64()
-		}
-		pts[i].Y = pts[i].X + 10*rand.Float64()
+		pts[i].X = float64(float64(sps[i].Timestamp) / 1000.0)
+		pts[i].Y = float64(sps[i].Value)
 	}
 	return pts
 }

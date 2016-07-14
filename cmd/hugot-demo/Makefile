@@ -13,7 +13,8 @@ dist/alertmanager:
 	cp $$GOPATH/bin/alertmanager ./dist
 
 dist/hugot-demo: main.go
-	go build -o dist/hugot-demo .
+	go install .
+	cp $$GOPATH/bin/hugot-demo ./dist
 
 .PHONY: docker
 
