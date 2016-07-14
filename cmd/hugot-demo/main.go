@@ -34,7 +34,7 @@ import (
 
 	"github.com/tcolgate/hugot"
 
-	prom "github.com/prometheus/client_golang/api/prometheus"
+	prom "github.com/tcolgate/client_golang/api/prometheus"
 
 	// Add some handlers
 	"github.com/tcolgate/hugot/handlers/ping"
@@ -55,17 +55,14 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var slackToken = flag.String("token", os.Getenv("SLACK_TOKEN"), "Slack API Token")
-var nick = flag.String("nick", "minion", "Bot nick")
+var nick = flag.String("nick", os.Getenv("NICK"), "Bot nick")
+var port = flag.String("port", os.Getenv("PORT"), "web port")
+var eurl = flag.String("url", os.Getenv("URL"), "Bot nick")
 
 func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	//a, err := shell.New(*nick)
-	//if err != nil {
-	//		glog.Fatal(err)
-	//	}
-
 	a, err := hslack.New(*slackToken, *nick)
 	if err != nil {
 		glog.Fatal(err)
@@ -78,12 +75,11 @@ func main() {
 
 	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
 	hugot.Handle(prometheus.New(&c, "http://localhost:9093", "alerts"))
-	hugot.HandleBackground(hugot.NewBackgroundHandler("test bg", "testing bg", bgHandler))
 
-	u, _ := url.Parse("http://localhost:8081")
+	u, _ := url.Parse(*eurl)
 	hugot.SetURL(u)
 
-	go http.ListenAndServe(":8081", nil)
+	go http.ListenAndServe(":"+*port, nil)
 
 	bot.ListenAndServe(ctx, a, nil)
 }

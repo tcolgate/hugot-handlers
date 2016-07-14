@@ -17,8 +17,8 @@ import (
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
 
-	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
+	prom "github.com/tcolgate/client_golang/api/prometheus"
 
 	"math/rand"
 

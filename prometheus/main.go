@@ -3,7 +3,7 @@ package prometheus
 import (
 	"net/http"
 
-	prom "github.com/prometheus/client_golang/api/prometheus"
+	prom "github.com/tcolgate/client_golang/api/prometheus"
 	"github.com/tcolgate/hugot"
 )
 
