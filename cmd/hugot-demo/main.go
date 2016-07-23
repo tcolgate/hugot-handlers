@@ -34,6 +34,7 @@ import (
 
 	"github.com/tcolgate/hugot"
 
+	am "github.com/tcolgate/client_golang/api/alertmanager"
 	prom "github.com/tcolgate/client_golang/api/prometheus"
 
 	// Add some handlers
@@ -74,7 +75,8 @@ func main() {
 	hugot.Handle(testweb.New())
 
 	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
-	hugot.Handle(prometheus.New(&c, "http://localhost:9093", "alerts"))
+	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
+	hugot.Handle(prometheus.New(&c, amc, "bottest"))
 
 	u, _ := url.Parse(*eurl)
 	hugot.SetURL(u)

@@ -214,7 +214,7 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 
 	plt.Title.Text = "Plotutil example"
 	plt.X.Label.Text = "Time"
-	plt.X.Tick.Marker = plot.UnixTimeTicks{}
+	plt.X.Tick.Marker = plot.UnixTimeTicks{Format: "Mon 15:04:05"}
 	plt.Y.Label.Text = "Y"
 
 	for _, ss := range mx {

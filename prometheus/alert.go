@@ -23,6 +23,11 @@ func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.
 		return err
 	}
 
+	if len(as) == 0 {
+		fmt.Fprint(w, "There are no outstanding alerts")
+		return nil
+	}
+
 	for _, a := range as {
 		fmt.Fprintf(w, "%#v", a)
 	}
@@ -36,6 +41,11 @@ func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *hugo
 	ss, err := am.NewSilenceAPI(p.amclient).List(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(ss) == 0 {
+		fmt.Fprint(w, "There are no active silences")
+		return nil
 	}
 
 	for _, s := range ss {
