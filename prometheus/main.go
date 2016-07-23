@@ -3,6 +3,7 @@ package prometheus
 import (
 	"net/http"
 
+	am "github.com/tcolgate/client_golang/api/alertmanager"
 	prom "github.com/tcolgate/client_golang/api/prometheus"
 	"github.com/tcolgate/hugot"
 )
@@ -12,7 +13,7 @@ func init() {
 
 type promH struct {
 	client    *prom.Client
-	amURL     string
+	amclient  am.Client
 	alertChan string
 
 	hugot.CommandHandler
@@ -22,11 +23,12 @@ type promH struct {
 }
 
 // New prometheus handler, returns a command and a webhook handler
-func New(c *prom.Client, amurl, achan string) *promH {
-	h := &promH{c, amurl, achan, nil, nil, http.NewServeMux()}
+func New(c *prom.Client, amc am.Client, achan string) *promH {
+	h := &promH{c, amc, achan, nil, nil, http.NewServeMux()}
 
 	cs := hugot.NewCommandSet()
-	cs.AddCommandHandler(hugot.NewCommandHandler("alerts", "alertsCmd", hugot.CommandFunc(h.alertCmd), nil))
+	cs.AddCommandHandler(hugot.NewCommandHandler("alerts", "list alerts", hugot.CommandFunc(h.alertsCmd), nil))
+	cs.AddCommandHandler(hugot.NewCommandHandler("silences", "list silences", hugot.CommandFunc(h.silencesCmd), nil))
 	cs.AddCommandHandler(hugot.NewCommandHandler("graph", "graph a query", hugot.CommandFunc(h.graphCmd), nil))
 	cs.AddCommandHandler(hugot.NewCommandHandler("explain", "explains the meaning of an alert rule name", h.explainCmd, nil))
 

@@ -10,12 +10,36 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/prometheus/alertmanager/notify"
+	am "github.com/tcolgate/client_golang/api/alertmanager"
 	"github.com/tcolgate/hugot"
 )
 
-func (p *promH) alertCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
 	if err := m.Parse(); err != nil {
 		return err
+	}
+	as, err := am.NewAlertAPI(p.amclient).List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, a := range as {
+		fmt.Fprintf(w, "%#v", a)
+	}
+	return nil
+}
+
+func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+	if err := m.Parse(); err != nil {
+		return err
+	}
+	ss, err := am.NewSilenceAPI(p.amclient).List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range ss {
+		fmt.Fprintf(w, "%#v", s)
 	}
 	return nil
 }
@@ -36,6 +60,7 @@ func (*promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 		glog.Error(err.Error())
 		return
 	}
+	// Get rid of any trailing space after decode
 	io.Copy(ioutil.Discard, r.Body)
 
 	fmt.Fprintf(rw, "%#v", hm)
