@@ -5,6 +5,7 @@ ADD dist/alertmanager /go/bin/alertmanager
 RUN mkdir /conf
 ADD prometheus.yml /conf/prometheus.yml
 ADD alertmanager.yml /conf/alertmanager.yml
+ADD prom.rules /conf/prom.rules
 
 ADD docker_run.sh /usr/local/bin/docker_run.sh
 CMD /usr/local/bin/docker_run.sh
