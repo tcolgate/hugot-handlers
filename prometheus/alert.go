@@ -54,7 +54,7 @@ func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *hugo
 	return nil
 }
 
-func (*promH) alertsHook(w http.ResponseWriter, r *http.Request) {
+func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	rw, ok := hugot.ResponseWriterFromContext(r.Context())
 	if !ok {
 		http.NotFound(w, r)
@@ -73,5 +73,6 @@ func (*promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	// Get rid of any trailing space after decode
 	io.Copy(ioutil.Discard, r.Body)
 
+	rw.SetChannel(p.alertChan)
 	fmt.Fprintf(rw, "%#v", hm)
 }
