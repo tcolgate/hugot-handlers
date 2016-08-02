@@ -212,10 +212,8 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plt.Title.Text = "Plotutil example"
-	plt.X.Label.Text = "Time"
+	plt.Title.Text = q[0]
 	plt.X.Tick.Marker = plot.UnixTimeTicks{Format: "Mon 15:04:05"}
-	plt.Y.Label.Text = "Y"
 
 	for _, ss := range mx {
 		for _, sps := range mx {
@@ -234,9 +232,6 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "image/png")
 	if _, err := wt.WriteTo(w); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

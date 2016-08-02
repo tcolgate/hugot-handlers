@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/golang/glog"
 	"github.com/prometheus/alertmanager/notify"
@@ -29,7 +30,7 @@ func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.
 	}
 
 	for _, a := range as {
-		fmt.Fprintf(w, "%#v", a)
+		fmt.Fprintf(w, "%s: Started at %s, #v", a.Labels["alertname"], a.StartsAt, a.Labels)
 	}
 	return nil
 }
@@ -74,5 +75,7 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	io.Copy(ioutil.Discard, r.Body)
 
 	rw.SetChannel(p.alertChan)
-	fmt.Fprintf(rw, "%#v", hm)
+
+	status := strings.ToUpper(hm.Data.Status)
+	fmt.Fprintf(rw, "%s: %#v", status, hm.Data.GroupLabels)
 }

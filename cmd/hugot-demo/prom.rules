@@ -1,0 +1,4 @@
+
+ALERT TestAlert
+  IF go_goroutines > 0
+  FOR 1m
