@@ -29,6 +29,7 @@ import (
 
 	"github.com/golang/glog"
 	bot "github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot-handlers/ivy"
 	"github.com/tcolgate/hugot-handlers/prometheus"
 	hslack "github.com/tcolgate/hugot/adapters/slack"
 
@@ -73,6 +74,7 @@ func main() {
 	hugot.Handle(testcli.New())
 	hugot.Handle(tableflip.New())
 	hugot.Handle(testweb.New())
+	hugot.Handle(ivy.New())
 
 	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
 	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
