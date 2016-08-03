@@ -85,5 +85,5 @@ func main() {
 
 	go http.ListenAndServe(":"+*port, nil)
 
-	bot.ListenAndServe(ctx, a, nil)
+	bot.ListenAndServe(ctx, nil, a)
 }
