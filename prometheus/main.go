@@ -16,7 +16,7 @@ type promH struct {
 	amclient  am.Client
 	alertChan string
 
-	hugot.CommandHandler
+	hugot.CommandWithSubsHandler
 	hugot.WebHookHandler
 
 	hmux *http.ServeMux
@@ -32,7 +32,7 @@ func New(c *prom.Client, amc am.Client, achan string) *promH {
 	cs.AddCommandHandler(hugot.NewCommandHandler("graph", "graph a query", hugot.CommandFunc(h.graphCmd), nil))
 	cs.AddCommandHandler(hugot.NewCommandHandler("explain", "explains the meaning of an alert rule name", h.explainCmd, nil))
 
-	h.CommandHandler = hugot.NewCommandHandler("prometheus", "manage the prometheus monitoring tool", nil, cs)
+	h.CommandWithSubsHandler = hugot.NewCommandHandler("prometheus", "manage the prometheus monitoring tool", nil, cs)
 
 	h.hmux.HandleFunc("/", http.NotFound)
 	h.hmux.HandleFunc("/alerts", h.alertsHook)
@@ -46,5 +46,5 @@ func New(c *prom.Client, amc am.Client, achan string) *promH {
 }
 
 func (p *promH) Describe() (string, string) {
-	return p.CommandHandler.Describe()
+	return p.CommandWithSubsHandler.Describe()
 }
