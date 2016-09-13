@@ -61,7 +61,7 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 
-	if glog.V(3) {
+	if glog.V(2) {
 		glog.Infof("%s %s", r.Method, r.URL)
 	}
 
