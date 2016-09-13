@@ -3,7 +3,7 @@ package prometheus
 import (
 	"bytes"
 	"fmt"
-	"io"
+	"image/color"
 	"math"
 	"net/http"
 	"sort"
@@ -13,36 +13,13 @@ import (
 
 	"context"
 
-	"github.com/golang/freetype"
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
+	"github.com/vdobler/chart"
 
 	"github.com/prometheus/common/model"
 	prom "github.com/tcolgate/client_golang/api/prometheus"
-
-	"github.com/gonum/plot"
-	"github.com/gonum/plot/plotter"
-	"github.com/gonum/plot/plotutil"
-	"github.com/gonum/plot/vg"
-	"github.com/gonum/plot/vg/fonts"
 )
-
-func Init() {
-	fontbytes, err := fonts.Asset("LiberationSans-Regular.ttf")
-	if err != nil {
-		panic(err)
-	}
-	f, err := freetype.ParseFont(fontbytes)
-	if err != nil {
-		panic(err)
-	}
-	vg.AddFont("Helvetica", f)
-	vg.AddFont("LiberationSans-Regular", f)
-	vg.AddFont("LiberationSans-Regular.ttf", f)
-
-	plot.DefaultFont = "Helvetica"
-	plotter.DefaultFont = "Helvetica"
-}
 
 func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
 	defText, defGraph := false, false
@@ -206,31 +183,14 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plt, err := plot.New()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	plt.Title.Text = q[0]
-	plt.X.Tick.Marker = plot.UnixTimeTicks{Format: "Mon 15:04:05"}
-
-	for _, ss := range mx {
-		for _, sps := range mx {
-			err = plotutil.AddLinePoints(plt, ss.Metric.String(), modelToPlot(sps.Values))
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-		}
-	}
+	plt := plot("thing", mx)
 
 	// Save the plot to a PNG file.
-	var wt io.WriterTo
-	if wt, err = plt.WriterTo(4*vg.Inch, 2*vg.Inch, "png"); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	//var wt io.WriterTo
+	//if wt, err = plt.WriterTo(4*vg.Inch, 2*vg.Inch, "png"); err != nil {
+	//		w.WriteHeader(http.StatusInternalServerError)
+	//		return
+	//	}
 
 	w.Header().Set("Content-Type", "image/png")
 	if _, err := wt.WriteTo(w); err != nil {
@@ -239,11 +199,28 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func modelToPlot(sps []model.SamplePair) plotter.XYs {
-	pts := make(plotter.XYs, len(sps))
+func modelToPlot(sps []model.SamplePair) []chart.EPoint {
+	pts := make([]chart.EPoint, len(sps))
 	for i := range pts {
-		pts[i].X = float64(float64(sps[i].Timestamp) / 1000.0)
-		pts[i].Y = float64(sps[i].Value)
+		ep := chart.EPoint{X: float64(sps[i].Timestamp) / 1000.0, Y: float64(sps[i].Value)}
+		pts = append(pts, ep)
 	}
 	return pts
+}
+
+func plot(title string, mx model.Matrix) *chart.ScatterChart {
+	tdc := chart.ScatterChart{Title: title}
+	tdc.XRange.Time, tdc.YRange.Time = true, false
+	//tdc.XRange.Label, tdc.YRange.Label = "Seeding", "Harvesting"
+
+	for _, ss := range mx {
+		for _, sps := range mx {
+			dt := modelToPlot(sps.Values)
+			tdc.AddData(ss.Metric.String(), dt, chart.PlotStylePoints, chart.Style{Symbol: 'o', SymbolColor: color.NRGBA{0xcc, 0x00, 0x00, 0xff}})
+		}
+	}
+
+	tdc.Key.Pos = "ibr"
+
+	return &tdc
 }
