@@ -30,7 +30,7 @@ func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.
 	}
 
 	for _, a := range as {
-		fmt.Fprintf(w, "%s: Started at %s, #v", a.Labels["alertname"], a.StartsAt, a.Labels)
+		fmt.Fprintf(w, "%s: Started at %s, %#v, %#v", a.Labels["alertname"], a.StartsAt, a.Labels, a.Annotations)
 	}
 	return nil
 }
