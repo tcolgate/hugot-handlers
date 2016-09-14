@@ -77,5 +77,5 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	rw.SetChannel(p.alertChan)
 
 	status := strings.ToUpper(hm.Data.Status)
-	fmt.Fprintf(rw, "%s: %#v", status, hm.Data.GroupLabels)
+	fmt.Fprintf(rw, "%s: %#v", status, hm.Data)
 }
