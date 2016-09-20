@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"strings"
 
 	"github.com/golang/glog"
 	"github.com/prometheus/alertmanager/notify"
@@ -74,8 +73,7 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	// Get rid of any trailing space after decode
 	io.Copy(ioutil.Discard, r.Body)
 
-	rw.SetChannel(p.alertChan)
-
-	status := strings.ToUpper(hm.Data.Status)
-	fmt.Fprintf(rw, "%s: %#v", status, hm.Data)
+	//rw.SetChannel(p.alertChan)
+	//status := strings.ToUpper(hm.Data.Status)
+	//fmt.Fprintf(rw, "%s: %#v", status, hm.Data)
 }
