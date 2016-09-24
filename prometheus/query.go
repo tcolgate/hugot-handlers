@@ -3,7 +3,9 @@ package prometheus
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"image/color"
+	"image/png"
 	"math"
 	"net/http"
 	"sort"
@@ -16,6 +18,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
 	"github.com/vdobler/chart"
+	"github.com/vdobler/chart/imgg"
 
 	"github.com/prometheus/common/model"
 	prom "github.com/tcolgate/client_golang/api/prometheus"
@@ -51,8 +54,8 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 		nu.Path = nu.Path + "graph/thing.png"
 		qs := nu.Query()
 		qs.Set("q", q)
-		qs.Set("s", fmt.Sprintf("%d", s.UnixNano()))
-		qs.Set("e", fmt.Sprintf("%d", e.UnixNano()))
+		qs.Set("s", fmt.Sprintf("%d", s.Unix()))
+		qs.Set("e", fmt.Sprintf("%d", e.Unix()))
 		nu.RawQuery = qs.Encode()
 
 		m := hugot.Message{
@@ -60,7 +63,6 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 			Attachments: []hugot.Attachment{
 				{
 					Fallback: "fallback",
-					Pretext:  "image",
 					ImageURL: nu.String(),
 				},
 			},
@@ -70,7 +72,11 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 	}
 
 	qapi := prom.NewQueryAPI(*p.client)
-	d, err := qapi.QueryRange(ctx, q, prom.Range{s, e, 15 * time.Second})
+	d, err := qapi.QueryRange(ctx, q, prom.Range{
+		Start: s,
+		End:   e,
+		Step:  1 * time.Second,
+	})
 	if err != nil {
 		return err
 	}
@@ -124,15 +130,18 @@ func normalize(ss []model.SamplePair) []float64 {
 	return out
 }
 
+const lineLen = 40
+
 func line(ss []model.SamplePair) string {
 	sls := []rune("▁▂▃▄▅▆▇█")
 	if len(ss) == 0 {
 		return ""
 	}
-	norm := normalize(ss)
+	down := lttb(ss, 40)
+	norm := normalize(down)
 	out := bytes.Buffer{}
 	for _, n := range norm {
-		i := n * float64(len(sls)-1)
+		i := float64(n) * float64(len(sls)-1)
 		if i < 0 {
 			i = 0
 		}
@@ -167,7 +176,11 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	qapi := prom.NewQueryAPI(*p.client)
-	d, err := qapi.QueryRange(ctx, q[0], prom.Range{time.Unix(0, int64(st)), time.Unix(0, int64(et)), 15 * time.Second})
+	d, err := qapi.QueryRange(ctx, q[0], prom.Range{
+		Start: time.Unix(int64(st), 0),
+		End:   time.Unix(int64(et), 0),
+		Step:  1 * time.Second,
+	})
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -183,44 +196,44 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plt := plot("thing", mx)
-
-	// Save the plot to a PNG file.
-	//var wt io.WriterTo
-	//if wt, err = plt.WriterTo(4*vg.Inch, 2*vg.Inch, "png"); err != nil {
-	//		w.WriteHeader(http.StatusInternalServerError)
-	//		return
-	//	}
+	img := plot(q[0], mx)
 
 	w.Header().Set("Content-Type", "image/png")
-	if _, err := wt.WriteTo(w); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	png.Encode(w, img)
 }
 
 func modelToPlot(sps []model.SamplePair) []chart.EPoint {
-	pts := make([]chart.EPoint, len(sps))
-	for i := range pts {
-		ep := chart.EPoint{X: float64(sps[i].Timestamp) / 1000.0, Y: float64(sps[i].Value)}
+	pts := []chart.EPoint{}
+	for i := range sps {
+		ep := chart.EPoint{X: float64(sps[i].Timestamp / 1000), Y: float64(sps[i].Value)}
 		pts = append(pts, ep)
 	}
 	return pts
 }
 
-func plot(title string, mx model.Matrix) *chart.ScatterChart {
-	tdc := chart.ScatterChart{Title: title}
-	tdc.XRange.Time, tdc.YRange.Time = true, false
-	//tdc.XRange.Label, tdc.YRange.Label = "Seeding", "Harvesting"
+const (
+	width  = 800
+	height = 300
+)
 
-	for _, ss := range mx {
-		for _, sps := range mx {
-			dt := modelToPlot(sps.Values)
-			tdc.AddData(ss.Metric.String(), dt, chart.PlotStylePoints, chart.Style{Symbol: 'o', SymbolColor: color.NRGBA{0xcc, 0x00, 0x00, 0xff}})
-		}
+func plot(title string, mx model.Matrix) *image.RGBA {
+	tdc := chart.ScatterChart{Title: title}
+
+	tdc.XRange.Time, tdc.YRange.Time = true, false
+	tdc.XRange.MinMode.Expand = chart.ExpandTight
+	tdc.XRange.MaxMode.Expand = chart.ExpandTight
+
+	for i, sps := range mx {
+		dt := modelToPlot(lttb(sps.Values, width))
+		tdc.AddData(sps.Metric.String(), dt, chart.PlotStyleLines, chart.AutoStyle(i, false))
 	}
 
 	tdc.Key.Pos = "ibr"
 
-	return &tdc
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	igr := imgg.AddTo(img, 0, 0, width, height, color.RGBA{0xff, 0xff, 0xff, 0xff}, nil, nil)
+
+	tdc.Plot(igr)
+
+	return img
 }
