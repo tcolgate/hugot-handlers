@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 
 	"github.com/golang/glog"
@@ -73,6 +74,7 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	// Get rid of any trailing space after decode
 	io.Copy(ioutil.Discard, r.Body)
 
+	log.Println(rw)
 	//rw.SetChannel(p.alertChan)
 	//status := strings.ToUpper(hm.Data.Status)
 	//fmt.Fprintf(rw, "%s: %#v", status, hm.Data)
