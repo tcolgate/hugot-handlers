@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"encoding/csv"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -23,8 +24,8 @@ func readData(ir io.Reader) ([]model.SamplePair, error) {
 			return nil, err
 		}
 
-		X, err := strconv.ParseFloat(record[0], 64)
-		Y, err := strconv.ParseFloat(record[1], 64)
+		X, _ := strconv.ParseFloat(record[0], 64)
+		Y, _ := strconv.ParseFloat(record[1], 64)
 		out = append(out, model.SamplePair{Value: model.SampleValue(Y), Timestamp: model.Time(X)})
 	}
 
@@ -44,6 +45,35 @@ func TestLTTB(t *testing.T) {
 		t.Fatalf("Wrong number of data points")
 	}
 
+	for i := 0; i < len(res); i++ {
+		if exp[i] != res[i] {
+			//t.Fatalf("Expected res[%v] == %v, got %v", i, exp[i], res[i])
+			fmt.Printf("Expected res[%v] == %v, got %v\n", i, exp[i], res[i].Value)
+		}
+	}
+}
+
+func TestLTTB2(t *testing.T) {
+	data := []model.SamplePair{
+		{1, 2},
+		{2, 2},
+		{3, 3},
+		{4, 3},
+		{5, 6},
+		{6, 3},
+		{7, 3},
+		{8, 5},
+		{9, 4},
+		{10, 4},
+		{11, 1},
+		{12, 2}}
+
+	exp := []model.SamplePair{
+		{1, 2},
+		{5, 6},
+		{12, 2}}
+
+	res := lttb(data, 3)
 	for i := 0; i < len(res); i++ {
 		if exp[i] != res[i] {
 			t.Fatalf("Expected res[%v] == %v, got %v", i, exp[i], res[i])
