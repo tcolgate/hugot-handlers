@@ -20,8 +20,8 @@ import (
 	"github.com/vdobler/chart"
 	"github.com/vdobler/chart/imgg"
 
+	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
-	prom "github.com/tcolgate/client_golang/api/prometheus"
 )
 
 func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {

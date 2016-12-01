@@ -23,7 +23,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 
 	"context"
 
@@ -31,12 +30,12 @@ import (
 	bot "github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot-handlers/ivy"
 	"github.com/tcolgate/hugot-handlers/prometheus"
-	hslack "github.com/tcolgate/hugot/adapters/slack"
+	hmm "github.com/tcolgate/hugot/adapters/mattermost"
 
 	"github.com/tcolgate/hugot"
 
-	am "github.com/tcolgate/client_golang/api/alertmanager"
-	prom "github.com/tcolgate/client_golang/api/prometheus"
+	am "github.com/prometheus/client_golang/api/alertmanager"
+	prom "github.com/prometheus/client_golang/api/prometheus"
 
 	// Add some handlers
 	"github.com/tcolgate/hugot/handlers/ping"
@@ -56,16 +55,18 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("hello world"))
 }
 
-var slackToken = flag.String("token", os.Getenv("SLACK_TOKEN"), "Slack API Token")
-var nick = flag.String("nick", os.Getenv("NICK"), "Bot nick")
-var port = flag.String("port", os.Getenv("PORT"), "web port")
-var eurl = flag.String("url", os.Getenv("URL"), "Bot nick")
+var eurl = flag.String("url", "http://localhost", "url")
+var port = flag.String("port", "8090", "url")
+var team = flag.String("team", "team-t", "team name")
+var mail = flag.String("email", "hugot@test.net", "Bot mail")
+var pass = flag.String("pass", "hugot", "Bot pass")
 
 func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	a, err := hslack.New(*slackToken, *nick)
+	a, err := hmm.New("http://localhost:8065", *team, *mail, *pass)
+
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -78,12 +79,14 @@ func main() {
 
 	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
 	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
-	hugot.Handle(prometheus.New(&c, amc, "bottest"))
+	hugot.Handle(prometheus.New(&c, amc, nil))
 
-	u, _ := url.Parse(*eurl)
+	u, _ := url.Parse("http://localhost:8090")
 	hugot.SetURL(u)
 
-	go http.ListenAndServe(":"+*port, nil)
+	glog.Info(hugot.URL())
+
+	go http.ListenAndServe(":8090", nil)
 
 	bot.ListenAndServe(ctx, nil, a)
 }

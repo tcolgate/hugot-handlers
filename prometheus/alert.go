@@ -1,17 +1,17 @@
 package prometheus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 
 	"github.com/golang/glog"
 	"github.com/prometheus/alertmanager/notify"
-	am "github.com/tcolgate/client_golang/api/alertmanager"
+	am "github.com/prometheus/client_golang/api/alertmanager"
 	"github.com/tcolgate/hugot"
 )
 
@@ -19,7 +19,7 @@ func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.
 	if err := m.Parse(); err != nil {
 		return err
 	}
-	as, err := am.NewAlertAPI(p.amclient).List(ctx)
+	as, err := am.NewAlertAPI(p.amclient).ListGroups(ctx)
 	if err != nil {
 		return err
 	}
@@ -29,9 +29,7 @@ func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.
 		return nil
 	}
 
-	for _, a := range as {
-		fmt.Fprintf(w, "%s: Started at %s, %#v, %#v", a.Labels["alertname"], a.StartsAt, a.Labels, a.Annotations)
-	}
+	fmt.Fprintf(w, "%#v", as)
 	return nil
 }
 
@@ -74,8 +72,44 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	// Get rid of any trailing space after decode
 	io.Copy(ioutil.Discard, r.Body)
 
-	log.Println(rw)
-	//rw.SetChannel(p.alertChan)
-	//status := strings.ToUpper(hm.Data.Status)
-	//fmt.Fprintf(rw, "%s: %#v", status, hm.Data)
+	channel := bytes.Buffer{}
+	err := p.tmpls.ExecuteTemplate(&channel, "channel", &hm.Data)
+	if err != nil {
+		glog.Infof("error expanding template, ", err.Error())
+		return
+	}
+
+	title := bytes.Buffer{}
+	err = p.tmpls.ExecuteTemplate(&title, "title", &hm.Data)
+	if err != nil {
+		glog.Infof("error expanding template, ", err.Error())
+		return
+	}
+
+	titleLink := bytes.Buffer{}
+	err = p.tmpls.ExecuteTemplate(&titleLink, "title_link", &hm.Data)
+	if err != nil {
+		glog.Infof("error expanding template, ", err.Error())
+		return
+	}
+
+	color := bytes.Buffer{}
+	err = p.tmpls.ExecuteTemplate(&color, "color", &hm.Data)
+	if err != nil {
+		glog.Infof("error expanding template, ", err.Error())
+		return
+	}
+
+	glog.Infof("channel: %s\n", channel.String())
+
+	m := hugot.Message{}
+	m.Channel = channel.String()
+	m.Attachments = []hugot.Attachment{
+		{
+			Title:     title.String(),
+			TitleLink: titleLink.String(),
+			Color:     color.String(),
+		},
+	}
+	rw.Send(context.TODO(), &m)
 }
