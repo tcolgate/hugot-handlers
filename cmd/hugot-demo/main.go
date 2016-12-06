@@ -28,6 +28,7 @@ import (
 
 	"github.com/golang/glog"
 	bot "github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot-handlers/grafana"
 	"github.com/tcolgate/hugot-handlers/ivy"
 	"github.com/tcolgate/hugot-handlers/prometheus"
 	hmm "github.com/tcolgate/hugot/adapters/mattermost"
@@ -76,6 +77,8 @@ func main() {
 	hugot.Handle(tableflip.New())
 	hugot.Handle(testweb.New())
 	hugot.Handle(ivy.New())
+
+	hugot.Handle(grafana.New(http.DefaultClient, "http://localhost:3000", "eyJrIjoiVHVKNVBmY0Z1VmFEdDRZSW9Wc2ZmSENyckV3bTJ5MDMiLCJuIjoicHJvbSIsImlkIjoxfQ=="))
 
 	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
 	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
