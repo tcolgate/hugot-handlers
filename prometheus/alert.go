@@ -13,9 +13,10 @@ import (
 	"github.com/prometheus/alertmanager/notify"
 	am "github.com/prometheus/client_golang/api/alertmanager"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot/handlers/command"
 )
 
-func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
 	if err := m.Parse(); err != nil {
 		return err
 	}
@@ -33,7 +34,7 @@ func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.
 	return nil
 }
 
-func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
 	if err := m.Parse(); err != nil {
 		return err
 	}

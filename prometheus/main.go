@@ -8,20 +8,22 @@ import (
 	am "github.com/prometheus/client_golang/api/alertmanager"
 	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot/bot"
+	"github.com/tcolgate/hugot/handlers/command"
 )
 
 func init() {
 }
 
 type promH struct {
+	command.Commander
+	cs   command.Set
+	wh   hugot.WebHookHandler
+	hmux *http.ServeMux
+
 	client   *prom.Client
 	amclient am.Client
 	tmpls    *template.Template
-
-	hugot.CommandWithSubsHandler
-	hugot.WebHookHandler
-
-	hmux *http.ServeMux
 }
 
 var defTmpls = map[string]string{
@@ -38,15 +40,15 @@ var defTmpls = map[string]string{
 func New(c *prom.Client, amc am.Client, tmpls *template.Template) *promH {
 	tmpls = defaultTmpls(tmpls)
 
-	h := &promH{c, amc, tmpls, nil, nil, http.NewServeMux()}
+	h := &promH{nil, nil, nil, http.NewServeMux(), c, amc, tmpls}
 
-	cs := hugot.NewCommandSet()
-	cs.AddCommandHandler(hugot.NewCommandHandler("alerts", "list alerts", hugot.CommandFunc(h.alertsCmd), nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("silences", "list silences", hugot.CommandFunc(h.silencesCmd), nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("graph", "graph a query", hugot.CommandFunc(h.graphCmd), nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("explain", "explains the meaning of an alert rule name", h.explainCmd, nil))
+	h.cs = command.NewSet(
+		command.New("alerts", "list alerts", h.alertsCmd),
+		command.New("silences", "list silences", h.silencesCmd),
+		command.New("graph", "graph a query", h.graphCmd),
+	)
 
-	h.CommandWithSubsHandler = hugot.NewCommandHandler("prometheus", "manage the prometheus monitoring tool", nil, cs)
+	h.Commander = command.New("prometheus", "manage the prometheus monitoring tool", h.cs.Command)
 
 	h.hmux.HandleFunc("/", http.NotFound)
 	h.hmux.HandleFunc("/alerts", h.alertsHook)
@@ -54,13 +56,9 @@ func New(c *prom.Client, amc am.Client, tmpls *template.Template) *promH {
 	h.hmux.HandleFunc("/graph", h.graphHook)
 	h.hmux.HandleFunc("/graph/", h.graphHook)
 
-	h.WebHookHandler = hugot.NewWebHookHandler("prometheus", "", h.webHook)
+	h.wh = hugot.NewWebHookHandler("prometheus", "", h.webHook)
 
 	return h
-}
-
-func (p *promH) Describe() (string, string) {
-	return p.CommandWithSubsHandler.Describe()
 }
 
 func defaultTmpls(tmpls *template.Template) *template.Template {
@@ -74,4 +72,10 @@ func defaultTmpls(tmpls *template.Template) *template.Template {
 		}
 	}
 	return tmpls
+}
+
+func Register(c *prom.Client, amc am.Client, tmpls *template.Template) {
+	h := New(c, amc, tmpls)
+	bot.Command(h)
+	bot.HandleHTTP(h.wh)
 }

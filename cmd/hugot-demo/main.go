@@ -27,21 +27,20 @@ import (
 	"context"
 
 	"github.com/golang/glog"
-	bot "github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot-handlers/grafana"
 	"github.com/tcolgate/hugot-handlers/ivy"
 	"github.com/tcolgate/hugot-handlers/prometheus"
 	hmm "github.com/tcolgate/hugot/adapters/mattermost"
-
-	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot/bot"
 
 	am "github.com/prometheus/client_golang/api/alertmanager"
 	prom "github.com/prometheus/client_golang/api/prometheus"
 
 	// Add some handlers
-	"github.com/tcolgate/hugot/handlers/ping"
-	"github.com/tcolgate/hugot/handlers/tableflip"
-	"github.com/tcolgate/hugot/handlers/testcli"
+	"github.com/tcolgate/hugot/handlers/command/ping"
+	"github.com/tcolgate/hugot/handlers/command/testcli"
+	"github.com/tcolgate/hugot/handlers/hears/tableflip"
 	"github.com/tcolgate/hugot/handlers/testweb"
 )
 
@@ -72,22 +71,22 @@ func main() {
 		glog.Fatal(err)
 	}
 
-	hugot.Handle(ping.New())
-	hugot.Handle(testcli.New())
-	hugot.Handle(tableflip.New())
-	hugot.Handle(testweb.New())
-	hugot.Handle(ivy.New())
+	ping.Register()
+	testcli.Register()
+	ivy.Register()
+	tableflip.Register()
+	testweb.Register()
 
-	hugot.Handle(grafana.New(http.DefaultClient, "http://localhost:3000", "eyJrIjoiVHVKNVBmY0Z1VmFEdDRZSW9Wc2ZmSENyckV3bTJ5MDMiLCJuIjoicHJvbSIsImlkIjoxfQ=="))
+	grafana.Register(http.DefaultClient, "http://localhost:3000", "eyJrIjoiVHVKNVBmY0Z1VmFEdDRZSW9Wc2ZmSENyckV3bTJ5MDMiLCJuIjoicHJvbSIsImlkIjoxfQ==")
 
 	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
 	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
-	hugot.Handle(prometheus.New(&c, amc, nil))
+	prometheus.Register(&c, amc, nil)
 
 	u, _ := url.Parse("http://localhost:8090")
-	hugot.SetURL(u)
+	bot.SetURL(u)
 
-	glog.Info(hugot.URL())
+	glog.Info(bot.URL())
 
 	go http.ListenAndServe(":8090", nil)
 

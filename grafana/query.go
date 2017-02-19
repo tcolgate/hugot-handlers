@@ -12,9 +12,10 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot/handlers/command"
 )
 
-func (h *grafH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+func (h *grafH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
 	dur := m.Duration("d", 15*time.Minute, "how far back to render")
 
 	if err := m.Parse(); err != nil {
@@ -27,7 +28,7 @@ func (h *grafH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 	q := strings.Join(m.Args(), " ")
 	s := time.Now().Add(-1 * *dur)
 	e := time.Now()
-	nu := *h.URL()
+	nu := *h.wh.URL()
 	nu.Path = nu.Path + "graph/thing.png"
 	qs := nu.Query()
 	qs.Set("q", q)
@@ -72,7 +73,7 @@ func (h *grafH) graphHook(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	hr, err := http.NewRequest("GET", fmt.Sprintf(`%s/render/dashboard-solo/db/prometheus-stats?from=%s&to=%s&panelId=3&width=%s&height=%s`, h.url, st, et, 1000, 600), nil)
+	hr, err := http.NewRequest("GET", fmt.Sprintf(`%s/render/dashboard-solo/db/%s?from=%d&to=%d&panelId=%d&width=%d&height=%d`, h.url, "prometheus-stats", st, et, 3, 1000, 600), nil)
 	if err != nil {
 		glog.Infof("%v", err.Error())
 		return
