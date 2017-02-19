@@ -1,6 +1,7 @@
 package prometheus
 
 import (
+	"context"
 	"net/http"
 	"text/template"
 
@@ -48,7 +49,7 @@ func New(c *prom.Client, amc am.Client, tmpls *template.Template) *promH {
 		command.New("graph", "graph a query", h.graphCmd),
 	)
 
-	h.Commander = command.New("prometheus", "manage the prometheus monitoring tool", h.cs.Command)
+	h.Commander = command.New("prometheus", "manage the prometheus monitoring tool", h.Command)
 
 	h.hmux.HandleFunc("/", http.NotFound)
 	h.hmux.HandleFunc("/alerts", h.alertsHook)
@@ -59,6 +60,14 @@ func New(c *prom.Client, amc am.Client, tmpls *template.Template) *promH {
 	h.wh = hugot.NewWebHookHandler("prometheus", "", h.webHook)
 
 	return h
+}
+
+func (h *promH) Command(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
+	if err := m.Parse(); err != nil {
+		return err
+	}
+
+	return h.cs.Command(ctx, w, m)
 }
 
 func defaultTmpls(tmpls *template.Template) *template.Template {
