@@ -17,14 +17,15 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot/handlers/command"
 	"github.com/vdobler/chart"
 	"github.com/vdobler/chart/imgg"
 
+	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
-	prom "github.com/tcolgate/client_golang/api/prometheus"
 )
 
-func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
 	defText, defGraph := false, false
 	if !hugot.IsTextOnly(w) {
 		defText = true
@@ -50,7 +51,7 @@ func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.M
 	e := time.Now()
 
 	if *webGraph {
-		nu := *p.URL()
+		nu := *p.wh.URL()
 		nu.Path = nu.Path + "graph/thing.png"
 		qs := nu.Query()
 		qs.Set("q", q)

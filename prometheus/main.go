@@ -1,38 +1,55 @@
 package prometheus
 
 import (
+	"context"
 	"net/http"
+	"text/template"
 
-	am "github.com/tcolgate/client_golang/api/alertmanager"
-	prom "github.com/tcolgate/client_golang/api/prometheus"
+	"github.com/Masterminds/sprig"
+	am "github.com/prometheus/client_golang/api/alertmanager"
+	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot/bot"
+	"github.com/tcolgate/hugot/handlers/command"
 )
 
 func init() {
 }
 
 type promH struct {
-	client    *prom.Client
-	amclient  am.Client
-	alertChan string
-
-	hugot.CommandWithSubsHandler
-	hugot.WebHookHandler
-
+	command.Commander
+	cs   command.Set
+	wh   hugot.WebHookHandler
 	hmux *http.ServeMux
+
+	client   *prom.Client
+	amclient am.Client
+	tmpls    *template.Template
+}
+
+var defTmpls = map[string]string{
+	"channel":    `x9b9ybtztjge3p745sadxxc5ih`,
+	"color":      `{{ if eq .Status "firing" }}#ff0000{{ else }}#00ff00{{ end }}`,
+	"title":      `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
+	"title_link": `{{ .ExternalURL }}/#/alerts?receiver={{ .Receiver }}`,
+	"pretext":    ``,
+	"text":       ``,
+	"fallback":   `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
 }
 
 // New prometheus handler, returns a command and a webhook handler
-func New(c *prom.Client, amc am.Client, achan string) *promH {
-	h := &promH{c, amc, achan, nil, nil, http.NewServeMux()}
+func New(c *prom.Client, amc am.Client, tmpls *template.Template) *promH {
+	tmpls = defaultTmpls(tmpls)
 
-	cs := hugot.NewCommandSet()
-	cs.AddCommandHandler(hugot.NewCommandHandler("alerts", "list alerts", hugot.CommandFunc(h.alertsCmd), nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("silences", "list silences", hugot.CommandFunc(h.silencesCmd), nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("graph", "graph a query", hugot.CommandFunc(h.graphCmd), nil))
-	cs.AddCommandHandler(hugot.NewCommandHandler("explain", "explains the meaning of an alert rule name", h.explainCmd, nil))
+	h := &promH{nil, nil, nil, http.NewServeMux(), c, amc, tmpls}
 
-	h.CommandWithSubsHandler = hugot.NewCommandHandler("prometheus", "manage the prometheus monitoring tool", nil, cs)
+	h.cs = command.NewSet(
+		command.New("alerts", "list alerts", h.alertsCmd),
+		command.New("silences", "list silences", h.silencesCmd),
+		command.New("graph", "graph a query", h.graphCmd),
+	)
+
+	h.Commander = command.New("prometheus", "manage the prometheus monitoring tool", h.Command)
 
 	h.hmux.HandleFunc("/", http.NotFound)
 	h.hmux.HandleFunc("/alerts", h.alertsHook)
@@ -40,11 +57,34 @@ func New(c *prom.Client, amc am.Client, achan string) *promH {
 	h.hmux.HandleFunc("/graph", h.graphHook)
 	h.hmux.HandleFunc("/graph/", h.graphHook)
 
-	h.WebHookHandler = hugot.NewWebHookHandler("prometheus", "", h.webHook)
+	h.wh = hugot.NewWebHookHandler("prometheus", "", h.webHook)
 
 	return h
 }
 
-func (p *promH) Describe() (string, string) {
-	return p.CommandWithSubsHandler.Describe()
+func (h *promH) Command(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
+	if err := m.Parse(); err != nil {
+		return err
+	}
+
+	return h.cs.Command(ctx, w, m)
+}
+
+func defaultTmpls(tmpls *template.Template) *template.Template {
+	if tmpls == nil {
+		tmpls = template.New("defaultTmpls").Funcs(sprig.TxtFuncMap())
+	}
+
+	for tn := range defTmpls {
+		if tmpls.Lookup(tn) == nil {
+			template.Must(tmpls.New(tn).Parse(defTmpls[tn]))
+		}
+	}
+	return tmpls
+}
+
+func Register(c *prom.Client, amc am.Client, tmpls *template.Template) {
+	h := New(c, amc, tmpls)
+	bot.Command(h)
+	bot.HandleHTTP(h.wh)
 }

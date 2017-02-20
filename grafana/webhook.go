@@ -1,11 +1,11 @@
-package prometheus
+package grafana
 
 import (
 	"net/http"
 	"strings"
 )
 
-func (p *promH) webHook(w http.ResponseWriter, r *http.Request) {
+func (p *grafH) webHook(w http.ResponseWriter, r *http.Request) {
 	pth := strings.TrimRight(p.wh.URL().Path, "/")
 	http.StripPrefix(pth, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p.hmux.ServeHTTP(w, r)
