@@ -1,11 +1,11 @@
 global:
 route:
   receiver: 'hugot'
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 4h
+  group_wait: 1s
+  group_interval: 5s
+  repeat_interval: 1m
   group_by: [alertname]
 receivers:
 - name: hugot
   webhook_configs:
-    - url: http://localhost:PORT/hugot/prometheus/alerts
+    - url: http://localhost:8090/hugot/prometheus/alerts

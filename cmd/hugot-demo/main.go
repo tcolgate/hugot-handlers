@@ -31,10 +31,10 @@ import (
 	"github.com/tcolgate/hugot-handlers/grafana"
 	"github.com/tcolgate/hugot-handlers/ivy"
 	"github.com/tcolgate/hugot-handlers/prometheus"
+	"github.com/tcolgate/hugot-handlers/prometheus/am"
 	hmm "github.com/tcolgate/hugot/adapters/mattermost"
 	"github.com/tcolgate/hugot/bot"
 
-	am "github.com/prometheus/client_golang/api/alertmanager"
 	prom "github.com/prometheus/client_golang/api/prometheus"
 
 	// Add some handlers
@@ -57,7 +57,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 
 var eurl = flag.String("url", "http://localhost", "url")
 var port = flag.String("port", "8090", "url")
-var team = flag.String("team", "team-t", "team name")
+var team = flag.String("team", "test", "team name")
 var mail = flag.String("email", "hugot@test.net", "Bot mail")
 var pass = flag.String("pass", "hugot", "Bot pass")
 

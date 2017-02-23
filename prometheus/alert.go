@@ -11,8 +11,8 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/prometheus/alertmanager/notify"
-	am "github.com/prometheus/client_golang/api/alertmanager"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot-handlers/prometheus/am"
 	"github.com/tcolgate/hugot/handlers/command"
 )
 
@@ -55,7 +55,7 @@ func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *comm
 }
 
 func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
-	_, ok := hugot.ResponseWriterFromContext(r.Context())
+	rw, ok := hugot.ResponseWriterFromContext(r.Context())
 	if !ok {
 		http.NotFound(w, r)
 	}

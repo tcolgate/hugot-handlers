@@ -6,9 +6,9 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig"
-	am "github.com/prometheus/client_golang/api/alertmanager"
 	prom "github.com/prometheus/client_golang/api/prometheus"
 	"github.com/tcolgate/hugot"
+	"github.com/tcolgate/hugot-handlers/prometheus/am"
 	"github.com/tcolgate/hugot/bot"
 	"github.com/tcolgate/hugot/handlers/command"
 )
@@ -28,7 +28,7 @@ type promH struct {
 }
 
 var defTmpls = map[string]string{
-	"channel":    `x9b9ybtztjge3p745sadxxc5ih`,
+	"channel":    `alerts`,
 	"color":      `{{ if eq .Status "firing" }}#ff0000{{ else }}#00ff00{{ end }}`,
 	"title":      `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
 	"title_link": `{{ .ExternalURL }}/#/alerts?receiver={{ .Receiver }}`,
