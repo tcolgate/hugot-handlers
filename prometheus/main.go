@@ -3,6 +3,7 @@ package prometheus
 import (
 	"context"
 	"net/http"
+	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig"
@@ -18,9 +19,10 @@ func init() {
 
 type promH struct {
 	command.Commander
-	cs   command.Set
-	wh   hugot.WebHookHandler
-	hmux *http.ServeMux
+	cs    command.Set
+	wh    hugot.WebHookHandler
+	hmux  *http.ServeMux
+	amURL string
 
 	client   *prom.Client
 	amclient am.Client
@@ -37,11 +39,43 @@ var defTmpls = map[string]string{
 	"fallback":   `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
 }
 
-// New prometheus handler, returns a command and a webhook handler
-func New(c *prom.Client, amc am.Client, tmpls *template.Template) *promH {
-	tmpls = defaultTmpls(tmpls)
+// TemplateFuncs
+var TemplateFuncs template.FuncMap
 
-	h := &promH{nil, nil, nil, http.NewServeMux(), c, amc, tmpls}
+func init() {
+	TemplateFuncs = template.FuncMap{}
+
+	for k, v := range sprig.TxtFuncMap() {
+		TemplateFuncs[k] = v
+	}
+	for k, v := range (template.FuncMap{
+		"toUpper": strings.ToUpper,
+		"toLower": strings.ToLower,
+		"title":   strings.Title,
+		// join is equal to strings.Join but inverts the argument order
+		// for easier pipelining in templates.
+		"join": func(sep string, s []string) string {
+			return strings.Join(s, sep)
+		},
+	}) {
+		TemplateFuncs[k] = v
+	}
+}
+
+// New prometheus handler, returns a command and a webhook handler
+func New(c *prom.Client, amURL string, tmpls *template.Template) *promH {
+	tmpls = defaultTmpls(tmpls)
+	amc, _ := am.New(am.Config{Address: amURL})
+
+	h := &promH{
+		nil,
+		nil,
+		nil,
+		http.NewServeMux(),
+		amURL,
+		c,
+		amc,
+		tmpls}
 
 	h.cs = command.NewSet(
 		command.New("alerts", "list alerts", h.alertsCmd),
@@ -72,7 +106,7 @@ func (h *promH) Command(ctx context.Context, w hugot.ResponseWriter, m *command.
 
 func defaultTmpls(tmpls *template.Template) *template.Template {
 	if tmpls == nil {
-		tmpls = template.New("defaultTmpls").Funcs(sprig.TxtFuncMap())
+		tmpls = template.New("defaultTmpls").Funcs(TemplateFuncs)
 	}
 
 	for tn := range defTmpls {
@@ -83,8 +117,8 @@ func defaultTmpls(tmpls *template.Template) *template.Template {
 	return tmpls
 }
 
-func Register(c *prom.Client, amc am.Client, tmpls *template.Template) {
-	h := New(c, amc, tmpls)
+func Register(c *prom.Client, amURL string, tmpls *template.Template) {
+	h := New(c, amURL, tmpls)
 	bot.Command(h)
 	bot.HandleHTTP(h.wh)
 }

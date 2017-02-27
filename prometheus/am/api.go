@@ -254,16 +254,29 @@ func (h *httpAlertAPI) List(ctx context.Context) ([]*model.Alert, error) {
 	return alts, err
 }
 
+type Alert struct {
+	Labels       map[string]string
+	Annotations  map[string]string
+	GeneratorURL string
+	EndsAt       time.Time
+	StartsAt     time.Time
+	Silenced     string
+	Inhibited    bool
+	Status       string
+}
+
 // AlertGroup represents a set of alerts that have been grouped by Alert Manager
 type AlertGroup struct {
 	Labels model.LabelSet
 	Blocks []struct {
-		Receiver       string
-		GroupBy        []model.LabelName
-		GroupWait      int
-		GroupInterval  int
-		RepeatInterval int
-		Alerts         []*model.Alert
+		Alerts    []Alert
+		RouteOpts struct {
+			Receiver       string
+			GroupBy        []model.LabelName
+			GroupWait      int
+			GroupInterval  int
+			RepeatInterval int
+		}
 	}
 }
 
