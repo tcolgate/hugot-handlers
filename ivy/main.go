@@ -1,7 +1,6 @@
 package ivy
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -12,17 +11,19 @@ import (
 )
 
 // New prometheus handler, returns a command and a webhook handler
-func New() command.Commander {
-	return command.New(
-		"ivy",
-		"the ivy APL-like calculator",
-		ivyHandler)
+func New() *command.Handler {
+	return command.NewFunc(func(root *command.Command) error {
+		root.Use = "ivy"
+		root.Short = "evaluate an ivy APL expression"
+		root.Long = "evaluates an expression using the ivy APL dialect. A large set of examples of ivy dialect can be seen here: https://github.com/robpike/ivy/blob/master/demo/demo.ivy"
+		root.Example = "ivy +/(iota 6) o.== ?60000 rho 6"
+		root.Run = ivyHandler
+		return nil
+	})
 }
 
-func ivyHandler(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	m.Parse()
-
-	out, err := ivy.Eval(strings.Join(m.Args(), " ") + "\n")
+func ivyHandler(cmd *command.Command, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
+	out, err := ivy.Eval(strings.Join(args, " ") + "\n")
 	if err != nil {
 		return err
 	}
@@ -31,6 +32,7 @@ func ivyHandler(ctx context.Context, w hugot.ResponseWriter, m *command.Message)
 	return nil
 }
 
+// Register ivy handler against the default bot.
 func Register() {
 	bot.Command(New())
 }
