@@ -98,6 +98,7 @@ func (cfg *Config) transport() CancelableTransport {
 type Client interface {
 	url(ep string, args map[string]string) *url.URL
 	do(context.Context, *http.Request) (*http.Response, []byte, error)
+	Endpoint() *url.URL
 }
 
 // New returns a new Client.
@@ -112,6 +113,10 @@ func New(cfg Config) (Client, error) {
 		endpoint:  u,
 		transport: cfg.transport(),
 	}, nil
+}
+
+func (c *httpClient) Endpoint() *url.URL {
+	return c.endpoint
 }
 
 type httpClient struct {

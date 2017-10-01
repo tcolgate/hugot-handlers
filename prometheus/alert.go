@@ -39,13 +39,10 @@ func (p *promH) alertCmd(root *command.Command) {
 			for _, ag := range ags {
 				ls := ag.Labels
 				for _, b := range ag.Blocks {
-					if b.RouteOpts.Receiver != "chat" {
-						continue
-					}
-
 					as := modelToLocal(b.Alerts)
 					active := []alert{}
 					for _, a := range as {
+						glog.Infof("a: %v\n", a)
 						if a.Resolved() {
 							continue
 						}
@@ -64,13 +61,14 @@ func (p *promH) alertCmd(root *command.Command) {
 						continue
 					}
 
-					d := data(b.RouteOpts.Receiver, p.amclient, ls, active)
+					d := data(p.amclient, b.RouteOpts.Receiver, ls, active)
 					rm, err := p.alertMessage(d)
 					if err != nil {
 						fmt.Fprintf(w, "error rendering template, %v", err)
 						continue
 					}
 
+					glog.Infof("rm: %#v", rm)
 					rm.Channel = m.Channel
 					rm.To = m.From
 					w.Send(ctx, rm)
@@ -328,7 +326,7 @@ type tmplData struct {
 	ExternalURL       string
 }
 
-func data(recv, extURL string, groupLabels model.LabelSet, as alerts) *tmplData {
+func data(amc am.Client, recv string, groupLabels model.LabelSet, as alerts) *tmplData {
 	data := &tmplData{
 		Receiver:          strings.SplitN(recv, "/", 2)[0],
 		Status:            as.Status(),
@@ -336,7 +334,7 @@ func data(recv, extURL string, groupLabels model.LabelSet, as alerts) *tmplData 
 		GroupLabels:       map[string]string{},
 		CommonLabels:      map[string]string{},
 		CommonAnnotations: map[string]string{},
-		ExternalURL:       extURL,
+		ExternalURL:       amc.Endpoint().String(),
 	}
 
 	for k, v := range groupLabels {
