@@ -42,7 +42,6 @@ func (p *promH) alertCmd(root *command.Command) {
 					as := modelToLocal(b.Alerts)
 					active := []alert{}
 					for _, a := range as {
-						glog.Infof("a: %v\n", a)
 						if a.Resolved() {
 							continue
 						}
@@ -68,7 +67,6 @@ func (p *promH) alertCmd(root *command.Command) {
 						continue
 					}
 
-					glog.Infof("rm: %#v", rm)
 					rm.Channel = m.Channel
 					rm.To = m.From
 					w.Send(ctx, rm)
@@ -340,7 +338,6 @@ func data(amc am.Client, recv string, groupLabels model.LabelSet, as alerts) *tm
 	for k, v := range groupLabels {
 		data.GroupLabels[string(k)] = string(v)
 	}
-
 	if len(as) >= 1 {
 		var (
 			commonLabels      = as[0].Labels.clone()
@@ -381,6 +378,8 @@ func (p *promH) alertMessage(d interface{}) (*hugot.Message, error) {
 	if err != nil {
 		glog.Infof("couldn't build attachment, %v", err)
 	}
+
+	glog.Infof("atch, %v", atch)
 
 	m.Attachments = []hugot.Attachment{
 		atch,
