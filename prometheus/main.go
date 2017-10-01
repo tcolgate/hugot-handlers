@@ -1,13 +1,12 @@
 package prometheus
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig"
-	prom "github.com/prometheus/client_golang/api/prometheus"
+	promC "github.com/prometheus/client_golang/api"
 	"github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot-handlers/prometheus/am"
 	"github.com/tcolgate/hugot/bot"
@@ -18,25 +17,29 @@ func init() {
 }
 
 type promH struct {
-	command.Commander
-	cs    command.Set
-	wh    hugot.WebHookHandler
-	hmux  *http.ServeMux
-	amURL string
+	*command.Handler
+	wh   hugot.WebHookHandler
+	hmux *http.ServeMux
 
-	client   *prom.Client
+	client   *promC.Client
 	amclient am.Client
 	tmpls    *template.Template
 }
 
 var defTmpls = map[string]string{
-	"channel":    `alerts`,
-	"color":      `{{ if eq .Status "firing" }}#ff0000{{ else }}#00ff00{{ end }}`,
-	"title":      `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
-	"title_link": `{{ .ExternalURL }}/#/alerts?receiver={{ .Receiver }}`,
-	"pretext":    ``,
-	"text":       ``,
-	"fallback":   `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
+	"channel":     `alerts`,
+	"color":       `{{ if eq .Status "firing" }}#ff0000{{ else }}#00ff00{{ end }}`,
+	"title":       `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
+	"title_link":  `{{ .ExternalURL }}/#/alerts?receiver={{ .Receiver }}`,
+	"author_name": ``,
+	"author_icon": ``,
+	"author_link": ``,
+	"image_url":   ``,
+	"thumb_url":   ``,
+	"pretext":     ``,
+	"text":        `{{$caRB := .CommonAnnotations.runbook_url}}{{$caDash := .CommonAnnotations.dashboard_url}}{{ range .Alerts.Firing }}{{ printf "%s" .Annotations.description }}{{if not $caDash}}{{ if .Annotations.dashboard_url }}{{printf " [:thermometer:](%s)"  .Annotations.dashboard_url }}{{end}}{{end}}{{if not $caRB}}{{ if .Annotations.runbook_url }}{{ printf "[:clipboard:](%s)" .Annotations.runbook_url }}{{end}}{{end}}{{ printf "\n"}}{{end}}{{ if eq .Status "firing" }} {{if $caRB }}[:clipboard:]({{ $caRB }}#{{ lower .GroupLabels.alertname }}){{ end }}{{ if $caDash }} [:thermometer:]({{ $caDash }}){{end}}{{end}}`,
+	"fallback":    `[{{ .Status | upper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}`,
+	"fields_json": ``,
 }
 
 // TemplateFuncs
@@ -63,27 +66,20 @@ func init() {
 }
 
 // New prometheus handler, returns a command and a webhook handler
-func New(c *prom.Client, amURL string, tmpls *template.Template) *promH {
+func New(c *promC.Client, amc am.Client, tmpls *template.Template) *promH {
 	tmpls = defaultTmpls(tmpls)
-	amc, _ := am.New(am.Config{Address: amURL})
 
-	h := &promH{
-		nil,
-		nil,
-		nil,
-		http.NewServeMux(),
-		amURL,
-		c,
-		amc,
-		tmpls}
+	h := &promH{nil, nil, http.NewServeMux(), c, amc, tmpls}
 
-	h.cs = command.NewSet(
-		command.New("alerts", "list alerts", h.alertsCmd),
-		command.New("silences", "list silences", h.silencesCmd),
-		command.New("graph", "graph a query", h.graphCmd),
-	)
+	h.Handler = command.NewFunc(func(root *command.Command) error {
+		root.Use = "prometheus"
+		root.Short = "manage prometheus"
+		h.alertCmd(root)
+		h.silenceCmd(root)
+		h.graphCmd(root, true)
 
-	h.Commander = command.New("prometheus", "manage the prometheus monitoring tool", h.Command)
+		return nil
+	})
 
 	h.hmux.HandleFunc("/", http.NotFound)
 	h.hmux.HandleFunc("/alerts", h.alertsHook)
@@ -94,14 +90,6 @@ func New(c *prom.Client, amURL string, tmpls *template.Template) *promH {
 	h.wh = hugot.NewWebHookHandler("prometheus", "", h.webHook)
 
 	return h
-}
-
-func (h *promH) Command(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	if err := m.Parse(); err != nil {
-		return err
-	}
-
-	return h.cs.Command(ctx, w, m)
 }
 
 func defaultTmpls(tmpls *template.Template) *template.Template {
@@ -117,8 +105,8 @@ func defaultTmpls(tmpls *template.Template) *template.Template {
 	return tmpls
 }
 
-func Register(c *prom.Client, amURL string, tmpls *template.Template) {
-	h := New(c, amURL, tmpls)
-	bot.Command(h)
+func Register(c *promC.Client, amc am.Client, tmpls *template.Template) {
+	h := New(c, amc, tmpls)
+	bot.Command(h.Handler)
 	bot.HandleHTTP(h.wh)
 }

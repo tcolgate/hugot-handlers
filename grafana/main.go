@@ -1,8 +1,8 @@
 package grafana
 
 import (
-	"context"
 	"net/http"
+	"time"
 
 	"github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot/bot"
@@ -13,9 +13,7 @@ func init() {
 }
 
 type grafH struct {
-	command.Commander
-	cs command.Set
-
+	*command.Handler
 	c     *http.Client
 	url   string
 	token string
@@ -26,32 +24,33 @@ type grafH struct {
 
 // New prometheus handler, returns a command and a webhook handler
 func New(c *http.Client, url, token string) *grafH {
-	h := &grafH{nil, nil, c, url, token, http.NewServeMux(), nil}
-
-	h.cs = command.NewSet()
-	h.cs.Add(command.New("graph", "graph a query", h.graphCmd))
-
-	h.Commander = command.New("grafana", "grafana integration", h.Command)
+	h := &grafH{nil, c, url, token, http.NewServeMux(), nil}
 
 	h.hmux.HandleFunc("/", http.NotFound)
 	h.hmux.HandleFunc("/graph", h.graphHook)
 	h.hmux.HandleFunc("/graph/", h.graphHook)
 
 	h.wh = hugot.NewWebHookHandler("grafana", "", h.webHook)
+	h.Handler = command.NewFunc(h.Setup)
 
 	return h
 }
 
-func (h *grafH) Command(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	if err := m.Parse(); err != nil {
-		return err
-	}
+func (h *grafH) Setup(root *command.Command) error {
+	root.Use = "grafana"
+	root.Short = "render a graph from grafana"
 
-	return h.cs.Command(ctx, w, m)
+	gCtx := &grafCtx{
+		wh: h.wh,
+	}
+	gCtx.dur = root.Flags().DurationP("duration", "d", 15*time.Minute, "how far back to render")
+	root.Run = gCtx.graphCmd
+
+	return nil
 }
 
 func Register(c *http.Client, url, token string) {
 	h := New(c, url, token)
-	bot.Command(h)
+	bot.Command(h.Handler)
 	bot.HandleHTTP(h.wh)
 }

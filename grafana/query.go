@@ -12,21 +12,20 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
-	"github.com/tcolgate/hugot/handlers/command"
 )
 
-func (h *grafH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	dur := m.Duration("d", 15*time.Minute, "how far back to render")
+type grafCtx struct {
+	dur *time.Duration
+	wh  hugot.WebHookHandler
+}
 
-	if err := m.Parse(); err != nil {
-		return err
-	}
+func (h *grafCtx) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
 
-	if len(m.Args()) == 0 {
+	if len(args) == 0 {
 		return fmt.Errorf("you need to give a query")
 	}
-	q := strings.Join(m.Args(), " ")
-	s := time.Now().Add(-1 * *dur)
+	q := strings.Join(args, " ")
+	s := time.Now().Add(-1 * *h.dur)
 	e := time.Now()
 	nu := *h.wh.URL()
 	nu.Path = nu.Path + "graph/thing.png"

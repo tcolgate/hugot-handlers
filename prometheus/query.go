@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -13,96 +14,88 @@ import (
 	"strings"
 	"time"
 
-	"context"
-
 	"github.com/golang/glog"
 	"github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot/handlers/command"
 	"github.com/vdobler/chart"
 	"github.com/vdobler/chart/imgg"
 
-	prom "github.com/prometheus/client_golang/api/prometheus"
+	prom "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
 
-func (p *promH) graphCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	defText, defGraph := false, false
-	if !hugot.IsTextOnly(w) {
-		defText = true
-		defGraph = false
-	} else {
-		defText = false
-		defGraph = true
+func (p *promH) graphCmd(root *command.Command, defGraph bool) {
+	cmd := &command.Command{
+		Use:   "graph",
+		Short: "render simple graphs from prometheus queries",
 	}
 
-	_ = m.Bool("t", defText, "Render the graphs as text sparkline.")
-	webGraph := m.Bool("g", defGraph, "Render the graphs as a png.")
-	dur := m.Duration("d", 15*time.Minute, "how far back to render")
-
-	if err := m.Parse(); err != nil {
-		return err
-	}
-
-	if len(m.Args()) == 0 {
-		return fmt.Errorf("you need to give a query")
-	}
-	q := strings.Join(m.Args(), " ")
-	s := time.Now().Add(-1 * *dur)
-	e := time.Now()
-
-	if *webGraph {
-		nu := *p.wh.URL()
-		nu.Path = nu.Path + "graph/thing.png"
-		qs := nu.Query()
-		qs.Set("q", q)
-		qs.Set("s", fmt.Sprintf("%d", s.Unix()))
-		qs.Set("e", fmt.Sprintf("%d", e.Unix()))
-		nu.RawQuery = qs.Encode()
-
-		m := hugot.Message{
-			Channel: m.Channel,
-			Attachments: []hugot.Attachment{
-				{
-					Fallback: "fallback",
-					ImageURL: nu.String(),
-				},
-			},
+	text := cmd.Flags().BoolP("text", "t", false, "Render the graphs as text sparkline.")
+	dur := cmd.Flags().DurationP("duration", "d", 15*time.Minute, "how far back to render")
+	cmd.Run = func(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("you need to give a query")
 		}
-		w.Send(ctx, &m)
+		q := strings.Join(args, " ")
+		s := time.Now().Add(-1 * *dur)
+		e := time.Now()
+
+		if !*text {
+			nu := *p.wh.URL()
+			nu.Path = nu.Path + "graph/thing.png"
+			qs := nu.Query()
+			qs.Set("q", q)
+			qs.Set("s", fmt.Sprintf("%d", s.Unix()))
+			qs.Set("e", fmt.Sprintf("%d", e.Unix()))
+			nu.RawQuery = qs.Encode()
+
+			m := hugot.Message{
+				Channel: m.Channel,
+				Attachments: []hugot.Attachment{
+					{
+						Fallback: "fallback",
+						ImageURL: nu.String(),
+					},
+				},
+			}
+			w.Send(ctx, &m)
+			return nil
+		}
+
+		qapi := prom.NewAPI(*p.client)
+		d, err := qapi.QueryRange(ctx, q, prom.Range{
+			Start: s,
+			End:   e,
+			Step:  1 * time.Second,
+		})
+		if err != nil {
+			return err
+		}
+
+		switch d.Type() {
+		case model.ValScalar:
+			m := d.(*model.Scalar)
+			glog.Infof("scalar %v", m)
+		case model.ValVector:
+			m := d.(model.Vector)
+			glog.Infof("vector %v", m)
+		case model.ValMatrix:
+			mx := d.(model.Matrix)
+			sort.Sort(mx)
+			for _, ss := range mx {
+				l := line(ss.Values)
+				fmt.Fprintf(w, "%v\n%s", ss.Metric, l)
+			}
+		case model.ValString:
+			m := d.(*model.String)
+			glog.Infof("matrix %v", m)
+		case model.ValNone:
+		}
+
 		return nil
 	}
 
-	qapi := prom.NewQueryAPI(*p.client)
-	d, err := qapi.QueryRange(ctx, q, prom.Range{
-		Start: s,
-		End:   e,
-		Step:  1 * time.Second,
-	})
-	if err != nil {
-		return err
-	}
-
-	switch d.Type() {
-	case model.ValScalar:
-		m := d.(*model.Scalar)
-		glog.Infof("scalar %v", m)
-	case model.ValVector:
-		m := d.(model.Vector)
-		glog.Infof("vector %v", m)
-	case model.ValMatrix:
-		mx := d.(model.Matrix)
-		sort.Sort(mx)
-		for _, ss := range mx {
-			l := line(ss.Values)
-			fmt.Fprintf(w, "%v\n%s", ss.Metric, l)
-		}
-	case model.ValString:
-		m := d.(*model.String)
-		glog.Infof("matrix %v", m)
-	case model.ValNone:
-	}
-
-	return nil
+	root.AddCommand(cmd)
 }
 
 func max_min(ss []model.SamplePair) (float64, float64) {
@@ -176,7 +169,7 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	qapi := prom.NewQueryAPI(*p.client)
+	qapi := prom.NewAPI(*p.client)
 	d, err := qapi.QueryRange(ctx, q[0], prom.Range{
 		Start: time.Unix(int64(st), 0),
 		End:   time.Unix(int64(et), 0),

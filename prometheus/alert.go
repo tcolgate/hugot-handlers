@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 	"github.com/prometheus/alertmanager/notify"
 	"github.com/prometheus/common/model"
 	"github.com/tcolgate/hugot"
@@ -20,81 +21,87 @@ import (
 	"github.com/tcolgate/hugot/handlers/command"
 )
 
-func (p *promH) alertsCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	if err := m.Parse(); err != nil {
-		return err
-	}
-	ags, err := am.NewAlertAPI(p.amclient).ListGroups(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(ags) == 0 {
-		fmt.Fprint(w, "There are no outstanding alerts")
-		return nil
-	}
-
-	for _, ag := range ags {
-		ls := ag.Labels
-		for _, b := range ag.Blocks {
-			if b.RouteOpts.Receiver != "chat" {
-				continue
-			}
-
-			as := modelToLocal(b.Alerts)
-			active := []alert{}
-			for _, a := range as {
-				if a.Resolved() {
-					continue
-				}
-
-				if a.Inhibited {
-					continue
-				}
-
-				if len(a.Silenced) != 0 {
-					continue
-				}
-				active = append(active, a)
-			}
-
-			if len(active) == 0 {
-				continue
-			}
-
-			d := data(b.RouteOpts.Receiver, p.amURL, ls, active)
-			rm, err := p.alertMessage(d)
+func (p *promH) alertCmd(root *command.Command) {
+	root.AddCommand(&command.Command{
+		Use:   "alerts",
+		Short: "manage alertmanager alerts",
+		Run: func(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
+			ags, err := am.NewAlertAPI(p.amclient).ListGroups(ctx)
 			if err != nil {
-				fmt.Fprintf(w, "error rendering template, %v", err)
-				continue
+				return err
 			}
 
-			rm.Channel = m.Channel
-			rm.To = m.From
-			w.Send(ctx, rm)
-		}
-	}
-	return nil
+			if len(ags) == 0 {
+				fmt.Fprint(w, "There are no outstanding alerts")
+				return nil
+			}
+
+			for _, ag := range ags {
+				ls := ag.Labels
+				for _, b := range ag.Blocks {
+					if b.RouteOpts.Receiver != "chat" {
+						continue
+					}
+
+					as := modelToLocal(b.Alerts)
+					active := []alert{}
+					for _, a := range as {
+						if a.Resolved() {
+							continue
+						}
+
+						if a.Inhibited {
+							continue
+						}
+
+						if len(a.Silenced) != 0 {
+							continue
+						}
+						active = append(active, a)
+					}
+
+					if len(active) == 0 {
+						continue
+					}
+
+					d := data(b.RouteOpts.Receiver, p.amclient, ls, active)
+					rm, err := p.alertMessage(d)
+					if err != nil {
+						fmt.Fprintf(w, "error rendering template, %v", err)
+						continue
+					}
+
+					rm.Channel = m.Channel
+					rm.To = m.From
+					w.Send(ctx, rm)
+				}
+			}
+			return nil
+		},
+	})
 }
 
-func (p *promH) silencesCmd(ctx context.Context, w hugot.ResponseWriter, m *command.Message) error {
-	if err := m.Parse(); err != nil {
-		return err
-	}
-	ss, err := am.NewSilenceAPI(p.amclient).List(ctx)
-	if err != nil {
-		return err
-	}
+func (p *promH) silenceCmd(root *command.Command) {
+	root.AddCommand(&command.Command{
+		Use:   "silences",
+		Short: "manage alertmanager silences",
+		Run: func(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
+			ss, err := am.NewSilenceAPI(p.amclient).List(ctx)
+			if err != nil {
+				return err
+			}
 
-	if len(ss) == 0 {
-		fmt.Fprint(w, "There are no active silences")
-		return nil
-	}
+			if len(ss) == 0 {
+				fmt.Fprint(w, "There are no active silences")
+				return nil
+			}
 
-	for _, s := range ss {
-		fmt.Fprintf(w, "%#v", s)
-	}
-	return nil
+			for _, s := range ss {
+				fmt.Fprintf(w, "%#v", s)
+			}
+			return nil
+		},
+	})
 }
 
 func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
@@ -119,50 +126,21 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 	channel := bytes.Buffer{}
 	err := p.tmpls.ExecuteTemplate(&channel, "channel", &hm.Data)
 	if err != nil {
-		glog.Infof("error expanding template, ", err.Error())
+		glog.Infof("error expanding channel template, ", err.Error())
 		return
 	}
-
-	title := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&title, "title", &hm.Data)
-	if err != nil {
-		glog.Infof("error expanding template, ", err.Error())
-		return
-	}
-
-	titleLink := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&titleLink, "title_link", &hm.Data)
-	if err != nil {
-		glog.Infof("error expanding template, ", err.Error())
-		return
-	}
-
-	color := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&color, "color", &hm.Data)
-	if err != nil {
-		glog.Infof("error expanding template, ", err.Error())
-		return
-	}
-
-	text := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&text, "text", &hm.Data)
-	if err != nil {
-		glog.Infof("error expanding template, ", err.Error())
-		return
-	}
-
-	glog.Infof("channel: %s\n", channel.String())
 
 	m := hugot.Message{}
 	m.Channel = channel.String()
-	m.Attachments = []hugot.Attachment{
-		{
-			Title:     title.String(),
-			TitleLink: titleLink.String(),
-			Color:     color.String(),
-			Text:      text.String(),
-		},
+	atch, err := hugot.AttachmentFromTemplates(p.tmpls, &hm.Data)
+	if err != nil {
+		glog.Infof("couldn't build attachment, %v", err)
 	}
+
+	m.Attachments = []hugot.Attachment{
+		atch,
+	}
+
 	rw.Send(context.TODO(), &m)
 }
 
@@ -394,45 +372,20 @@ func data(recv, extURL string, groupLabels model.LabelSet, as alerts) *tmplData 
 }
 
 func (p *promH) alertMessage(d interface{}) (*hugot.Message, error) {
-	channel := bytes.Buffer{}
+	var channel bytes.Buffer
 	err := p.tmpls.ExecuteTemplate(&channel, "channel", d)
 	if err != nil {
-		return nil, err
-	}
-
-	title := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&title, "title", d)
-	if err != nil {
-		return nil, err
-	}
-
-	titleLink := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&titleLink, "title_link", d)
-	if err != nil {
-		return nil, err
-	}
-
-	color := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&color, "color", d)
-	if err != nil {
-		return nil, err
-	}
-
-	text := bytes.Buffer{}
-	err = p.tmpls.ExecuteTemplate(&text, "text", d)
-	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "can't expand channel tempalte")
 	}
 
 	m := hugot.Message{}
-	m.Channel = channel.String()
+	atch, err := hugot.AttachmentFromTemplates(p.tmpls, d)
+	if err != nil {
+		glog.Infof("couldn't build attachment, %v", err)
+	}
+
 	m.Attachments = []hugot.Attachment{
-		{
-			Title:     title.String(),
-			TitleLink: titleLink.String(),
-			Color:     color.String(),
-			Text:      text.String(),
-		},
+		atch,
 	}
 	return &m, nil
 }

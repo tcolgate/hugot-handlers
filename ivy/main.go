@@ -1,6 +1,7 @@
 package ivy
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -22,7 +23,7 @@ func New() *command.Handler {
 	})
 }
 
-func ivyHandler(cmd *command.Command, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
+func ivyHandler(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
 	out, err := ivy.Eval(strings.Join(args, " ") + "\n")
 	if err != nil {
 		return err
