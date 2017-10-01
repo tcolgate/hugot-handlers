@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/nlopes/slack"
 	"github.com/pkg/errors"
 	"github.com/prometheus/alertmanager/notify"
 	"github.com/prometheus/common/model"
@@ -133,6 +134,21 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 		glog.Infof("couldn't build attachment, %v", err)
 	}
 
+	atch.CallbackID = "1234"
+	atch.Actions = []slack.AttachmentAction{
+		{
+			Name:  "hello",
+			Type:  "button",
+			Text:  "clickme",
+			Value: "Pressed",
+			Confirm: &slack.ConfirmationField{
+				Title:       "title",
+				Text:        "text",
+				OkText:      "ok",
+				DismissText: "dismiss",
+			},
+		},
+	}
 	m.Attachments = []hugot.Attachment{
 		atch,
 	}
