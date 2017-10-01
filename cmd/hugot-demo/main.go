@@ -35,7 +35,7 @@ import (
 	hmm "github.com/tcolgate/hugot/adapters/mattermost"
 	"github.com/tcolgate/hugot/bot"
 
-	prom "github.com/prometheus/client_golang/api/prometheus"
+	prom "github.com/prometheus/client_golang/api"
 
 	// Add some handlers
 	"github.com/tcolgate/hugot/handlers/command/ping"
@@ -77,9 +77,12 @@ func main() {
 	tableflip.Register()
 	testweb.Register()
 
-	grafana.Register(http.DefaultClient, "http://localhost:3000", "eyJrIjoiVHVKNVBmY0Z1VmFEdDRZSW9Wc2ZmSENyckV3bTJ5MDMiLCJuIjoicHJvbSIsImlkIjoxfQ==")
+	grafana.Register(
+		http.DefaultClient,
+		"http://localhost:3000",
+		"eyJrIjoiVHVKNVBmY0Z1VmFEdDRZSW9Wc2ZmSENyckV3bTJ5MDMiLCJuIjoicHJvbSIsImlkIjoxfQ==")
 
-	c, _ := prom.New(prom.Config{Address: "http://localhost:9090"})
+	c, _ := prom.NewClient(prom.Config{Address: "http://localhost:9090"})
 	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
 	prometheus.Register(&c, amc, nil)
 

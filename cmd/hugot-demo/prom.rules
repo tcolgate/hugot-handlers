@@ -2,3 +2,11 @@
 ALERT TestAlert
   IF go_goroutines > 0
   FOR 1m
+  LABELS {
+    severity="page",
+  }
+  ANNOTATIONS {
+    description = 'An alert that fires to test things are working',
+    dashboard_url = 'https://see.it.here.com/thangs',
+    runbook_url = 'https://fix.it.here.com/{{ $labels.instance }}'
+  }
