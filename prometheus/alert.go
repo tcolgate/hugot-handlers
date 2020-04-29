@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/pkg/errors"
-	"github.com/prometheus/alertmanager/notify"
+	"github.com/prometheus/alertmanager/notify/webhook"
 	"github.com/prometheus/common/model"
 	"github.com/tcolgate/hugot"
 	"github.com/tcolgate/hugot-handlers/prometheus/am"
@@ -110,7 +109,7 @@ func (p *promH) alertsHook(w http.ResponseWriter, r *http.Request) {
 		glog.Infof("%s %s", r.Method, r.URL)
 	}
 
-	hm := notify.WebhookMessage{}
+	hm := webhook.Message{}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&hm); err != io.EOF && err != nil {
 		glog.Error(err.Error())
@@ -370,7 +369,7 @@ func (p *promH) alertMessage(d interface{}) (*hugot.Message, error) {
 	var channel bytes.Buffer
 	err := p.tmpls.ExecuteTemplate(&channel, "channel", d)
 	if err != nil {
-		return nil, errors.Wrap(err, "can't expand channel tempalte")
+		return nil, fmt.Errorf("can't expand channel template, %w", err)
 	}
 
 	m := hugot.Message{}

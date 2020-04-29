@@ -63,7 +63,7 @@ func (p *promH) graphCmd(root *command.Command, defGraph bool) {
 		}
 
 		qapi := prom.NewAPI(*p.client)
-		d, err := qapi.QueryRange(ctx, q, prom.Range{
+		d, _, err := qapi.QueryRange(ctx, q, prom.Range{
 			Start: s,
 			End:   e,
 			Step:  1 * time.Second,
@@ -170,7 +170,7 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	qapi := prom.NewAPI(*p.client)
-	d, err := qapi.QueryRange(ctx, q[0], prom.Range{
+	d, _, err := qapi.QueryRange(ctx, q[0], prom.Range{
 		Start: time.Unix(int64(st), 0),
 		End:   time.Unix(int64(et), 0),
 		Step:  1 * time.Second,
