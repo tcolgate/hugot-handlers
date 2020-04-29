@@ -62,7 +62,7 @@ func (p *promH) graphCmd(root *command.Command, defGraph bool) {
 			return nil
 		}
 
-		qapi := prom.NewAPI(*p.client)
+		qapi := prom.NewAPI(p.client)
 		d, _, err := qapi.QueryRange(ctx, q, prom.Range{
 			Start: s,
 			End:   e,
@@ -98,7 +98,7 @@ func (p *promH) graphCmd(root *command.Command, defGraph bool) {
 	root.AddCommand(cmd)
 }
 
-func max_min(ss []model.SamplePair) (float64, float64) {
+func maxMin(ss []model.SamplePair) (float64, float64) {
 	max := math.Inf(-1)
 	min := math.Inf(1)
 	for _, s := range ss {
@@ -113,7 +113,7 @@ func max_min(ss []model.SamplePair) (float64, float64) {
 }
 
 func normalize(ss []model.SamplePair) []float64 {
-	max, min := max_min(ss)
+	max, min := maxMin(ss)
 	if max == 0 {
 		max = 1
 	}
@@ -169,7 +169,7 @@ func (p *promH) graphHook(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	qapi := prom.NewAPI(*p.client)
+	qapi := prom.NewAPI(p.client)
 	d, _, err := qapi.QueryRange(ctx, q[0], prom.Range{
 		Start: time.Unix(int64(st), 0),
 		End:   time.Unix(int64(et), 0),

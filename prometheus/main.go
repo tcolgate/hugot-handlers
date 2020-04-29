@@ -21,7 +21,7 @@ type promH struct {
 	wh   hugot.WebHookHandler
 	hmux *http.ServeMux
 
-	client   *promC.Client
+	client   promC.Client
 	amclient am.Client
 	tmpls    *template.Template
 }
@@ -61,7 +61,7 @@ func init() {
 }
 
 // New prometheus handler, returns a command and a webhook handler
-func New(c *promC.Client, amc am.Client, tmpls *template.Template) *promH {
+func New(c promC.Client, amc am.Client, tmpls *template.Template) *promH {
 	tmpls = defaultTmpls(tmpls)
 
 	h := &promH{nil, nil, http.NewServeMux(), c, amc, tmpls}
@@ -100,7 +100,7 @@ func defaultTmpls(tmpls *template.Template) *template.Template {
 	return tmpls
 }
 
-func Register(c *promC.Client, amc am.Client, tmpls *template.Template) {
+func Register(c promC.Client, amc am.Client, tmpls *template.Template) {
 	h := New(c, amc, tmpls)
 	bot.Command(h.Handler)
 	bot.HandleHTTP(h.wh)
