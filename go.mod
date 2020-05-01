@@ -13,8 +13,8 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/alertmanager v0.20.0
-	github.com/prometheus/client_golang v1.6.0
-	github.com/prometheus/common v0.9.1
+	github.com/prometheus/client_golang v1.2.1
+	github.com/prometheus/common v0.7.0
 	github.com/tcolgate/hugot v0.4.1
 	github.com/vdobler/chart v1.0.0
 	golang.org/x/net v0.0.0-20200425230154-ff2c4b7c35a0

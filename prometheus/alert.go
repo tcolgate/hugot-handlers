@@ -13,10 +13,13 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/prometheus/alertmanager/api/v2/client"
+	"github.com/prometheus/alertmanager/api/v2/client/alertgroup"
+	"github.com/prometheus/alertmanager/api/v2/client/silence"
+	modelv2 "github.com/prometheus/alertmanager/api/v2/models"
 	"github.com/prometheus/alertmanager/notify/webhook"
-	"github.com/prometheus/common/model"
+	model "github.com/prometheus/common/model"
 	"github.com/tcolgate/hugot"
-	"github.com/tcolgate/hugot-handlers/prometheus/am"
 	"github.com/tcolgate/hugot/handlers/command"
 )
 
@@ -25,10 +28,15 @@ func (p *promH) alertCmd(root *command.Command) {
 		Use:   "alerts",
 		Short: "manage alertmanager alerts",
 		Run: func(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
-			ags, err := am.NewAlertAPI(p.amclient).ListGroups(ctx)
+			resp, err := p.amclient.Alertgroup.GetAlertGroups(
+				&alertgroup.GetAlertGroupsParams{
+					Context: ctx,
+				})
 			if err != nil {
 				return err
 			}
+
+			ags := resp.GetPayload()
 
 			if len(ags) == 0 {
 				fmt.Fprint(w, "There are no outstanding alerts")
@@ -37,39 +45,37 @@ func (p *promH) alertCmd(root *command.Command) {
 
 			for _, ag := range ags {
 				ls := ag.Labels
-				for _, b := range ag.Blocks {
-					as := modelToLocal(b.Alerts)
-					active := []alert{}
-					for _, a := range as {
-						if a.Resolved() {
-							continue
-						}
-
-						if a.Inhibited {
-							continue
-						}
-
-						if len(a.Silenced) != 0 {
-							continue
-						}
-						active = append(active, a)
-					}
-
-					if len(active) == 0 {
+				as := modelToLocal(ag.Alerts)
+				active := []alert{}
+				for _, a := range as {
+					if a.Resolved() {
 						continue
 					}
 
-					d := data(p.amclient, b.RouteOpts.Receiver, ls, active)
-					rm, err := p.alertMessage(d)
-					if err != nil {
-						fmt.Fprintf(w, "error rendering template, %v", err)
+					if a.Inhibited {
 						continue
 					}
 
-					rm.Channel = m.Channel
-					rm.To = m.From
-					w.Send(ctx, rm)
+					if len(a.Silenced) != 0 {
+						continue
+					}
+					active = append(active, a)
 				}
+
+				if len(active) == 0 {
+					continue
+				}
+
+				d := data(p.amclient, *ag.Receiver.Name, ls, active)
+				rm, err := p.alertMessage(d)
+				if err != nil {
+					fmt.Fprintf(w, "error rendering template, %v", err)
+					continue
+				}
+
+				rm.Channel = m.Channel
+				rm.To = m.From
+				w.Send(ctx, rm)
 			}
 			return nil
 		},
@@ -81,10 +87,11 @@ func (p *promH) silenceCmd(root *command.Command) {
 		Use:   "silences",
 		Short: "manage alertmanager silences",
 		Run: func(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message, args []string) error {
-			ss, err := am.NewSilenceAPI(p.amclient).List(ctx)
+			res, err := p.amclient.Silence.GetSilences(&silence.GetSilencesParams{Context: ctx})
 			if err != nil {
 				return err
 			}
+			ss := res.GetPayload()
 
 			if len(ss) == 0 {
 				fmt.Fprint(w, "There are no active silences")
@@ -150,16 +157,24 @@ type alert struct {
 	Inhibited    bool      `json:"inhibited"`
 }
 
-func modelToLocal(as []am.Alert) alerts {
+func modelToLocal(as []*modelv2.GettableAlert) alerts {
 	las := alerts{}
 	for _, a := range as {
 		la := alert{}
-		la.StartsAt = a.StartsAt
-		la.EndsAt = a.EndsAt
-		la.GeneratorURL = a.GeneratorURL
+		if a.StartsAt != nil {
+			la.StartsAt = time.Time(*a.StartsAt)
+		}
+		if a.EndsAt != nil {
+			la.EndsAt = time.Time(*a.EndsAt)
+		}
+		la.GeneratorURL = a.GeneratorURL.String()
 		la.Labels = KV{}
-		la.Silenced = a.Silenced
-		la.Inhibited = a.Inhibited
+		if len(a.Status.SilencedBy) > 0 {
+			la.Silenced = a.Status.SilencedBy[0]
+		}
+		if len(a.Status.InhibitedBy) > 0 {
+			la.Inhibited = true
+		}
 		for k, v := range a.Labels {
 			la.Labels[string(k)] = string(v)
 		}
@@ -193,9 +208,9 @@ func (a *alert) ResolvedAt(ts time.Time) bool {
 // Status returns the status of the alert.
 func (a *alert) Status() string {
 	if a.Resolved() {
-		return string(model.AlertResolved)
+		return "resolved"
 	}
-	return string(model.AlertFiring)
+	return "FIring"
 }
 
 // Firing returns the subset of alerts that are firing.
@@ -323,7 +338,8 @@ type tmplData struct {
 	ExternalURL       string
 }
 
-func data(amc am.Client, recv string, groupLabels model.LabelSet, as alerts) *tmplData {
+func data(amc *client.Alertmanager, recv string, groupLabels modelv2.LabelSet, as alerts) *tmplData {
+
 	data := &tmplData{
 		Receiver:          strings.SplitN(recv, "/", 2)[0],
 		Status:            as.Status(),
@@ -331,7 +347,7 @@ func data(amc am.Client, recv string, groupLabels model.LabelSet, as alerts) *tm
 		GroupLabels:       map[string]string{},
 		CommonLabels:      map[string]string{},
 		CommonAnnotations: map[string]string{},
-		ExternalURL:       amc.Endpoint().String(),
+		//ExternalURL:       amc.Endpoint().String(),
 	}
 
 	for k, v := range groupLabels {

@@ -31,10 +31,10 @@ import (
 	"github.com/tcolgate/hugot-handlers/grafana"
 	"github.com/tcolgate/hugot-handlers/ivy"
 	"github.com/tcolgate/hugot-handlers/prometheus"
-	"github.com/tcolgate/hugot-handlers/prometheus/am"
 	hmm "github.com/tcolgate/hugot/adapters/mattermost"
 	"github.com/tcolgate/hugot/bot"
 
+	am "github.com/prometheus/alertmanager/api/v2/client"
 	prom "github.com/prometheus/client_golang/api"
 
 	// Add some handlers
@@ -83,8 +83,12 @@ func main() {
 		"eyJrIjoiVHVKNVBmY0Z1VmFEdDRZSW9Wc2ZmSENyckV3bTJ5MDMiLCJuIjoicHJvbSIsImlkIjoxfQ==")
 
 	c, _ := prom.NewClient(prom.Config{Address: "http://localhost:9090"})
-	amc, _ := am.New(am.Config{Address: "http://localhost:9093"})
-	prometheus.Register(&c, amc, nil)
+	amc := am.NewHTTPClientWithConfig(nil, &am.TransportConfig{
+		Host:     "localhost:9093",
+		BasePath: "/",
+		Schemes:  []string{"http"},
+	})
+	prometheus.Register(c, amc, nil)
 
 	u, _ := url.Parse("http://localhost:8090")
 	bot.SetURL(u)
