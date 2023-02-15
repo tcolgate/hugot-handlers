@@ -1,4 +1,4 @@
-package brainfuck
+package bf
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 // New prometheus handler, returns a command and a webhook handler
 func New() hugot.CommandHandler {
 	return hugot.NewCommandHandler(
-		"brainfuck",
+		"bf",
 		"Needs no introduction",
-		brainFuckHandler,
+		bfHandler,
 		nil)
 }
 
@@ -22,7 +22,7 @@ const (
 	MAX_PROG_LEN = 30000;
 )
 
-func brainFuckHandler(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
+func bfHandler(ctx context.Context, w hugot.ResponseWriter, m *hugot.Message) error {
 	m.Parse()
 
 	var program = strings.Join(m.Args(), " ") + "\n"
